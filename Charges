@@ -1,0 +1,225 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+#include <string.h>
+
+#define TRUE 1
+
+void main()
+{
+    FILE *ENT; /* Arquivo com a sequencia de aminoácidos */
+    FILE *SAI; /* Arquivo com as cargas em função do pH */
+    int cont, ador, i; /* Contadores para funções gerais */
+    int numres; /* Número de resíduos */
+    int seq[1000]; /* Armazena a sequência de resíduos */
+    float par[21][50]; /* Matriz para guardar informações sobre os aminoácidos */
+    float carga[15]; /* Armazena a carga da proteína para um dado pH */
+    char *res[21]; /* Apontador de string para guardar o nome dos resíduos */
+    char lido[5]; /* String para leitura */
+
+    /* Inicializando o vetor de siglas de resíduos */
+    res[1] = "ALA";
+    res[2] = "ARG";
+    res[3] = "ASN";
+    res[4] = "ASP";
+    res[5] = "CYS";
+    res[6] = "GLU";
+    res[7] = "GLN";
+    res[8] = "GLY";
+    res[9] = "HIS";
+    res[10] = "ILE";
+    res[11] = "LEU";
+    res[12] = "LYS";
+    res[13] = "MET";
+    res[14] = "PHE";
+    res[15] = "PRO";
+    res[16] = "SER";
+    res[17] = "THR";
+    res[18] = "TRP";
+    res[19] = "TYR";
+    res[20] = "VAL";
+
+    /* Inicializando os parâmetros de cada amino ácido */
+    /* Para o resíduo Alanina */
+    par[1][1] = 2.33; /* pKa da carboxila */
+    par[1][2] = 9.71; /* pKa da amina */
+    par[1][3] = 0.00; /* pKa da cadeia lateral */
+    par[1][4] = 0.00; /* Ni */
+
+    /* Para o resíduo Arginina */
+    par[2][1] = 2.03;
+    par[2][2] = 9.00;
+    par[2][3] = 12.10;
+    par[2][4] = 1.00;
+
+    /* Para o resíduo Asparagina */
+    par[3][1] = 2.16;
+    par[3][2] = 8.76;
+    par[3][3] = 0.00;
+    par[3][4] = 0.00;
+
+    /* Para o resíduo Ácido Aspártico */
+    par[4][1] = 1.95;
+    par[4][2] = 9.66;
+    par[4][3] = 3.71;
+    par[4][4] = -1.00;
+
+    /* Para o resíduo Cisteína */
+    par[5][1] = 1.91;
+    par[5][2] = 10.28;
+    par[5][3] = 8.14;
+    par[5][4] = 1.00;
+
+    /* Para o resíduo Ácido Glutâmico */
+    par[6][1] = 2.16;
+    par[6][2] = 9.58;
+    par[6][3] = 4.15;
+    par[6][4] = -1.00;
+
+    /* Para o resíduo Glutamina */
+    par[7][1] = 2.18;
+    par[7][2] = 9.00;
+    par[7][3] = 0.00;
+    par[7][4] = 0.00;
+
+    /* Para o resíduo Glicina */
+    par[8][1] = 2.34;
+    par[8][2] = 9.58;
+    par[8][3] = 0.00;
+    par[8][4] = 0.00;
+
+    /* Para o resíduo Histidina */
+    par[9][1] = 1.70;
+    par[9][2] = 9.09;
+    par[9][3] = 6.04;
+    par[9][4] = -1.00;
+
+    /* Para o resíduo Isoleucina */
+    par[10][1] = 2.26;
+    par[10][2] = 9.60;
+    par[10][3] = 0.00;
+    par[10][4] = 0.00;
+
+    /* Para o resíduo Leucina */
+    par[11][1] = 2.32;
+    par[11][2] = 9.58;
+    par[11][3] = 0.00;
+    par[11][4] = 0.00;
+
+    /* Para o resíduo  Lisina */
+    par[12][1] = 2.15;
+    par[12][2] = 9.16;
+    par[12][3] = 10.67;
+    par[12][4] = 1.00;
+
+    /* Para o resíduo Metionina */
+    par[13][1] = 2.16;
+    par[13][2] = 9.08;
+    par[13][3] = 0.00;
+    par[13][4] = 0.00;
+
+    /* Para o resíduo Fenilalanina */
+    par[14][1] = 2.18;
+    par[14][2] = 9.09;
+    par[14][3] = 0.00;
+    par[14][4] = 0.00;
+
+    /* Para o resíduo Protamina */
+    par[15][1] = 1.95;
+    par[15][2] = 10.47;
+    par[15][3] = 0.00;
+    par[15][4] = 0.00;
+
+    /* Para o resíduo Serina */
+    par[16][1] = 2.13;
+    par[16][2] = 9.05;
+    par[16][3] = 0.00;
+    par[16][4] = 0.00;
+
+    /* Para o resíduo Treonina */
+    par[17][1] = 2.20;
+    par[17][2] = 8.96;
+    par[17][3] = 0.00;
+    par[17][4] = 0.00;
+
+    /* Para o resíduo Triptofano */
+    par[18][1] = 2.38;
+    par[18][2] = 9.34;
+    par[18][3] = 0.00;
+    par[18][4] = 0.00;
+
+    /* Para o resíduo Tirosina */
+    par[19][1] = 2.24;
+    par[19][2] = 9.04;
+    par[19][3] = 10.10;
+    par[19][4] = 1.00;
+
+    /* Para o resíduo Valina */
+    par[20][1] = 2.27;
+    par[20][2] = 9.52;
+    par[20][3] = 0.00;
+    par[20][4] = 0.00;
+
+    /* Zerando o vetor de cargas */
+    for(cont = 0; cont <= 14; cont ++)
+    {
+        carga[cont] = 0;
+    }
+
+    /* Armazenando e contando os resíduos */
+    ENT = fopen("sequencia.txt", "r");
+    cont = 1;
+    while(TRUE)
+    {
+        i = fscanf(ENT, "%s", lido);
+        if(i == -1)
+        {
+            fclose(ENT);
+            break; /* Acabou o arquivo */
+        }
+        else
+        {
+            for(ador = 1; ador <= 20; ador ++)
+            {
+                if(strcmp(lido, res[ador]) == 0)
+                {
+                    seq[cont] = ador; /* Guarda o número que corresponde ao resíduo aqui no código */
+                    cont = cont + 1; /* Passa para a próxima posição no vetor seq */
+                    break; /* Quebra o loop para passar para o próximo resíduo */
+                }
+            }
+        }
+    }
+
+    numres = cont;
+
+    for(cont = 1; cont <= 14; cont ++)
+    {
+        for(ador = 1; ador <= numres; ador ++)
+        {
+            if(par[seq[ador]][3] != 0)
+            {
+                if(ador == 1) /* Terminal amina */
+                {
+                    carga[cont] = carga[cont] + 1/(1 + pow(10, cont - par[seq[ador]][2])) + par[seq[ador]][4]/(1 + pow(10, par[seq[ador]][4]*(cont - par[seq[ador]][3])));
+                }
+                else if(ador == numres) /* Terminal Carboxila */
+                {
+                    carga[cont] = carga[cont] - 1/(1 + pow(10, par[seq[ador]][1] - cont)) + par[seq[ador]][4]/(1 + pow(10, par[seq[ador]][4]*(cont - par[seq[ador]][3])));
+                }
+                else
+                {
+                    carga[cont] = carga[cont] + par[seq[ador]][4]/(1 + pow(10, par[seq[ador]][4]*(cont - par[seq[ador]][3])));
+                }
+            }
+        }
+    }
+
+    /* Impressão dos dados */
+    SAI = fopen("dados.txt", "w");
+    for(cont = 1; cont <= 14; cont ++)
+    {
+        fprintf(SAI, "%4.2d   %7.3f\n", cont, carga[cont]);
+    }
+    fclose(SAI);
+}
