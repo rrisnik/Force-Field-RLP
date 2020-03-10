@@ -1,0 +1,103 @@
+/* Arquivo para escrever coordenadas em zig-zag da proteína */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+#include <string.h>
+
+int main ()
+{
+    FILE *ENT; /* Arquivo de entrada contendo a sequência de resíduos da proteína */
+    FILE *SAI; /* Arquivo de saída com a configuração nova */
+    char RES[3]; /* Vetor para armazenar o resíduo lido no arquivo de entrada */
+    char GLU[] = "GLU", ASP[] = "ASP", HIS[] = "HIS", LYS[] = "LYS", ARG[] = "ARG", MET[] = "MET", PROT[] = "BSACG"; /* Resíduos existentes */
+    int N; /* Quantidade de resíduos na proteína */
+    int L; /* Identificador da molécula no .gro */
+    int cont; /* Contador */
+    int RES1, RES2, RES3, RES4, RES5; /* Comparativos entre resíduos */
+    int traj; /* Controle de trajetória: 1 para reta, 2 para diagonal */
+    int contraj; /* Controle do sentido da trajetória 1 */
+    double X, Y, Z; /* Coordenadas de cada resíduo */
+    double boxl; /* Largura da caixa */
+    double delta; /* Incremento em Z */
+
+    /* Atribuição das constantes */
+    N = 583; /* 583 resíduos na BSACG */
+    L = 1; /* Apenas uma molécula de BSACG */
+    boxl = 16.0; /* Aresta da caixa */
+    delta = 0.012; /* Incremento do zig-zag */
+
+    /* Abertura dos arquivos de entrada e saída */
+    ENT = fopen("primstruc.pdb", "r");
+    SAI = fopen("conf_zz.gro", "w");
+
+    fprintf(SAI, "BSA coarse-grained\n"); /* Titulo do arquivo .gro */
+    fprintf(SAI, "%5d\n", N); /* Quantidade de resíduos */
+
+    /* Construção da molécula */
+
+    Z = 1.0;
+    X = 1.0;
+    Y = 1.0;
+    contraj = 0;
+
+    for(cont = 1; cont <= N; cont ++)
+    {
+        fscanf(ENT, "%s", RES);
+        RES1 = strcmp(RES, GLU);
+        RES2 = strcmp(RES, ASP);
+        RES3 = strcmp(RES, HIS);
+        RES4 = strcmp(RES, LYS);
+        RES5 = strcmp(RES, ARG);
+
+        if(RES1 == 0 || RES2 == 0)
+        {
+            fprintf(SAI, "%5d%-5s%5s%5d%8.3lf%8.3lf%8.3lf\n", L, PROT, GLU, cont, X, Y, Z);
+        }
+        else if(RES3 == 0 || RES4 == 0 || RES5 == 0)
+        {
+            fprintf(SAI, "%5d%-5s%5s%5d%8.3lf%8.3lf%8.3lf\n", L, PROT, HIS, cont, X, Y, Z);
+        }
+        else
+        {
+            fprintf(SAI, "%5d%-5s%5s%5d%8.3lf%8.3lf%8.3lf\n", L, PROT, MET, cont, X, Y, Z);
+        }
+
+        if(cont == 65 || cont == 145 || cont == 225 || cont == 305 || cont == 385 || cont == 465 || cont == 545)
+        {
+            traj = 2;
+        }
+        else if(cont == 1 || cont == 80 || cont == 160 || cont == 240 || cont == 320 || cont == 400 || cont == 480 || cont == 560)
+        {
+            traj = 1;
+            contraj++;
+        }
+
+        if(traj == 1)
+        {
+            if(contraj%2 != 0)
+            {
+               Y = Y + 0.2;
+            }
+            else if(contraj%2 == 0)
+            {
+                Y = Y - 0.2;
+            }
+
+        }
+
+        if(traj == 2)
+        {
+            X = X + (0.2/sqrt(2.0));
+            Z = Z + (0.2/sqrt(2.0));
+        }
+    }
+
+    fprintf(SAI, "%10.5lf%10.5lf%10.5lf\n", boxl, boxl, boxl);
+    fclose(ENT);
+    fclose(SAI);
+
+    system("editconf -f conf_zz.gro -o bsa_zz.gro");
+
+    return 0;
+}
