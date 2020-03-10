@@ -1,0 +1,44 @@
+/* Código para solvatar a proteína de maneira suave */
+
+#include <stdio.h>
+#include <string.h>
+#include <math.h>
+#include <stdlib.h>
+
+#define MAX 200
+
+void lista();
+
+void main()
+{
+    char command[MAX];
+    int cont;
+    FILE *LIS;
+
+    lista();
+
+    LIS = fopen("lista.txt", "r");
+
+    for(cont = 1; cont <= 8000; cont ++)
+    {
+        fscanf(LIS, "%[^\n]%*c", command);
+        system(command);
+    }
+
+    fclose(LIS);
+}
+
+void lista()
+{
+    int cont; /* Contador para o comando */
+    FILE *SAI; /* Arquivo de saída para lista */
+
+    SAI = fopen("lista.txt", "w");
+
+    for(cont = 0; cont < 8000; cont ++)
+    {
+        fprintf(SAI, "gmx insert-molecules -f solv04%d.gro -ci sdk.gro -o solv04%d.gro -nmol 1 -allpair -try 1000000\n", cont, cont + 1);
+    }
+
+    fclose(SAI);
+}
