@@ -1,0 +1,330 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+
+#define TRUE 1
+#define MAX 50
+
+/***********************************************************************/
+/**                                                                   **/
+/** Este código lê um pdb com a sequência de resíduos de uma proteína **/
+/** e gera o arquivo .inp para o campo de forças desenvolvido         **/
+/** Adicionada a sugestão de tamanho de caixa!!                       **/
+/**                                                                   **/
+/***********************************************************************/
+
+void main(int argc, char **argv)
+{
+    char ent[] = "-f"; /* Comparação para ler o arquivo de entrada */
+    char *arqent; /* String para receber o nome do arquivo de entrada */
+    char sai[] = "-o"; /* Comparação para ler o arquivo de saída */
+    char *arqsai; /* String para receber o nome do arquivo de saída */
+    char res[MAX]; /* Vetor para armazenar o nome do resíduo no arquivo PDB */
+    char verif[4]; /* Vetor para verificação da extensão dos arquivos */
+    char verinp[] = ".inp"; /* Verificação da extensão do arquivo de saída informado pelo usuário */
+    char verpdb[] = ".pdb"; /* Verificação da extensão do arquivo de entrada informado pelo usuário */
+    char erro[] = "ERRO: Arquivo de entrada não especificado.\n"; /* Erro de arquivo de entrada não especificado */
+    char erroextpdb[] = "ERRO: Arquivo de entrada com a extensão incorreta.\n"; /* Erro de extensão de arquivo de entrada incorreta */
+    char erroarg[] = "ERRO: Número de argumentos inconsistente.\n"; /* Erro no número de argumentos */
+    char exito[] = "Arquivo input gerado com êxito.\n"; /* Mensagem de êxito de execução */
+    char lixo[2*MAX]; /* String para jogar informações inúteis fora */
+    char ato[MAX]; /* String para verificação se foi encontrado o termo ATOM no arquivo pdb */
+    char atom[] = "ATOM"; /* String para comparação com a string ato */
+    char anisou[] = "ANISOU"; /* String para comparação com a string ato*/
+    FILE *INP; /* Arquivo de saída */
+    FILE *PDB; /* Arquivo de entrada */
+    double descarte; /* Descarte de valores lidos */
+    float ph; /* pH requerido do usuário */
+    float tam; /* Tamanho da caixa sugerido */
+    int compe; /* Comprimento da string do arquivo de entrada */
+    int comps; /* Comprimento da string do arquivo de saída */
+    int cont; /* Contador geral */
+    int f; /* Índice do arquivo de entrada */
+    int numres; /* Quantidade de resíduos */
+    int o; /* Índice do arquivo de saída */
+    int size; /* Tamanho da string */
+
+    f = 0;
+    o = 0;
+    numres = 0;
+    arqent = "";
+    arqsai = "";
+
+    if(argc%2 == 0)
+    {
+        printf("%s", erroarg);
+        exit(EXIT_FAILURE);
+    }
+
+    /* Loop para buscar os parâmetros de entrada do programa */
+
+    for(cont = 0; cont < argc; cont++)
+    {
+        if(strcmp(argv[cont], ent) == 0)
+        {
+            f = cont + 1;
+            arqent = argv[cont + 1];
+        }
+
+        if(strcmp(argv[cont], sai) == 0)
+        {
+            o = cont + 1;
+            arqsai = argv[cont + 1];
+        }
+    }
+
+    /* Fim do loop para recolhimento dos parâmetros */
+
+    /* Sessão de proteção a erros do usuario - constantemente sendo melhorada */
+
+    if(f%2 != 0 || arqent == "" || arqent == sai || f == 0)
+    {
+        printf("%s", erro);
+        exit(EXIT_FAILURE);
+    }
+
+    compe = strlen(arqent);
+    comps = strlen(arqsai);
+
+    /* Teste da extensão dos arquivos de saída e entrada */
+    if(strcmp(strcpy(verif, &arqent[compe - 4]), verpdb) != 0)
+    {
+        printf("%s", erroextpdb);
+        exit(EXIT_FAILURE);
+    }
+    else if(strcmp(arqsai,"") != 0)
+    {
+        if(strcmp(strcpy(verif, &arqsai[comps - 4]), verinp) != 0)
+        {
+            strcat(arqsai, verinp);
+        }
+    }
+
+    /* Fim da sessão de proteção */
+
+    /* Vamos requerir alguns parâmetros do usuário */
+    printf("\nPor favor, digite o pH da simulacao: ");
+    scanf("%f", &ph);
+
+
+    PDB = fopen(arqent, "r"); /* Abrindo o arquivo de entrada */
+
+    /* Loop para encontrar o primeiro registro ATOM */
+
+    while(TRUE)
+    {
+        fscanf(PDB, "%s", ato);
+
+        if(strcmp(atom, ato) == 0)
+        {
+            break;
+        }
+        else
+        {
+            fscanf(PDB, "%[^\n]%*c", lixo);
+        }
+
+    }
+
+    /* Agora que chegamos no primeiro átomo, vamos contar a quantidade de resíduos que a proteína contém */
+
+    fscanf(PDB, "%s%s", lixo, lixo);
+
+    if(strcmp(lixo, "NH1AARG") == 0 || strcmp(lixo, "NH1BARG") == 0 || strcmp(lixo, "NH2AARG") == 0 || strcmp(lixo, "NH2BARG") == 0)
+    {
+        fscanf(PDB, "%s%d%s%s%s%s", lixo, &numres, lixo, lixo, lixo, lixo);
+    }
+    else
+    {
+        fscanf(PDB, "%s%s%d%s%s%s%s", lixo, lixo, &numres, lixo, lixo, lixo, lixo);
+    }
+
+    if(strcmp(lixo, "1.00") == 0 || strcmp(lixo, "0.50") == 0)
+    {
+        fscanf(PDB, "%s%s%s", lixo, lixo, ato);
+    }
+    else
+    {
+        fscanf(PDB, "%s%s", lixo, ato);
+    }
+
+    while(TRUE)
+    {
+        if(strcmp(atom, ato) == 0)
+        {
+            fscanf(PDB, "%s%s", lixo, lixo);
+
+            if(strcmp(lixo, "NH1AARG") == 0 || strcmp(lixo, "NH1BARG") == 0 || strcmp(lixo, "NH2AARG") == 0 || strcmp(lixo, "NH2BARG") == 0)
+            {
+                fscanf(PDB, "%s%d%s%s%s%s", lixo, &numres, lixo, lixo, lixo, lixo);
+            }
+            else
+            {
+                fscanf(PDB, "%s%s%d%s%s%s%s", lixo, lixo, &numres, lixo, lixo, lixo, lixo);
+            }
+
+            if(strcmp(lixo, "1.00") == 0 || strcmp(lixo, "0.50") == 0)
+            {
+                fscanf(PDB, "%s%s%s", lixo, lixo, ato);
+            }
+            else
+            {
+                fscanf(PDB, "%s%s", lixo, ato);
+            }
+
+        }
+        else if(strcmp(anisou, ato) == 0)
+        {
+            fscanf(PDB, "%s%s", lixo, lixo);
+
+            if(strcmp(lixo, "NH1AARG") == 0 || strcmp(lixo, "NH1BARG") == 0 || strcmp(lixo, "NH2AARG") == 0 || strcmp(lixo, "NH2BARG") == 0)
+            {
+                fscanf(PDB, "%s%d%s%s%s%s%s%s%s%s", lixo, &numres, lixo, lixo, lixo, lixo, lixo, lixo, lixo, ato);
+            }
+            else
+            {
+                fscanf(PDB, "%s%s%d%s%s%s%s%s%s%s%s", lixo, lixo, &numres, lixo, lixo, lixo, lixo, lixo, lixo, lixo, ato);
+            }
+        }
+        else
+        {
+            break;
+        }
+
+    }
+
+    /* Agora que temos a quantidade total de resíduos na proteína podemos começar a escrever o arquivo de input, mas antes devemos resetar o arquivo de entrada */
+
+    fclose(PDB);
+    PDB = fopen(arqent, "r"); /* Resetamos para que o cursor volte ao topo do documento */
+    tam = 0.0088*numres + 4.8634; /* Função ajustada com base na experiência dos pesquisadores */
+
+    /* Novamente precisamos chegar ao primeiro registro de ATOM */
+
+    while(TRUE)
+    {
+        fscanf(PDB, "%s", ato);
+
+        if(strcmp(atom, ato) == 0)
+        {
+            break;
+        }
+        else
+        {
+            fscanf(PDB, "%[^\n]%*c", lixo);
+        }
+
+    }
+
+    if(o == 0)
+    {
+        INP = fopen("input.inp", "w"); /* Abertura do arquivo de input */
+    }
+    else
+    {
+        INP = fopen(arqsai, "w"); /* Abertura do arquivo de input */
+    }
+
+    fprintf(INP, "TITLE  Input file generated by GENINP.\n"); /* Escreve o título do documento */
+    fprintf(INP, "%6d%6.2lf%6.2lf\n", numres, tam, ph); /* Imprime, nesta ordem, o número de resíduos, o tamanho da caixa e o ponto isoelétrico */
+
+    fscanf(PDB, "%s%s", lixo, lixo);
+
+    if(strcmp(lixo, "NH1AARG") == 0 || strcmp(lixo, "NH1BARG") == 0 || strcmp(lixo, "NH2AARG") == 0 || strcmp(lixo, "NH2BARG") == 0)
+    {
+        size = strlen(lixo);
+        strcpy(res, &lixo[size - 4]);
+        fscanf(PDB, "%s%d%s%s%s%s", lixo, &cont, lixo, lixo, lixo, lixo);
+    }
+    else
+    {
+        fscanf(PDB, "%s%s%d%s%s%s%s", res, lixo, &cont, lixo, lixo, lixo, lixo);
+    }
+
+    if(strcmp(lixo, "1.00") == 0 || strcmp(lixo, "0.50") == 0)
+    {
+        fscanf(PDB, "%s%s%s", lixo, lixo, ato);
+    }
+    else
+    {
+        fscanf(PDB, "%s%s", lixo, ato);
+    }
+
+    fprintf(INP, "%3s ", res);
+    numres = cont;
+
+    while(TRUE)
+    {
+        if(strcmp(atom, ato) != 0 && strcmp(anisou, ato) != 0)
+        {
+            break;
+        }
+        else if(strcmp(atom, ato) == 0)
+        {
+            fscanf(PDB, "%s%s", lixo, lixo);
+
+            if(strcmp(lixo, "NH1AARG") == 0 || strcmp(lixo, "NH1BARG") == 0 || strcmp(lixo, "NH2AARG") == 0 || strcmp(lixo, "NH2BARG") == 0)
+            {
+                size = strlen(lixo);
+                strcpy(res, &lixo[size - 3]);
+                fscanf(PDB, "%s%d%s%s%s%s", lixo, &cont, lixo, lixo, lixo, lixo);
+            }
+            else
+            {
+                fscanf(PDB, "%s%s%d%s%s%s%s", res, lixo, &cont, lixo, lixo, lixo, lixo);
+
+                if(strcmp(res, "BARG") == 0 || strcmp(res, "AARG") == 0)
+                {
+                    size = strlen(res);
+                    strcpy(res, &res[size - 3]);
+                }
+            }
+
+            if(strcmp(lixo, "1.00") == 0 || strcmp(lixo, "0.50") == 0)
+            {
+                fscanf(PDB, "%s%s%s", lixo, lixo, ato);
+            }
+            else
+            {
+                fscanf(PDB, "%s%s", lixo, ato);
+            }
+        }
+        else if(strcmp(anisou, ato) == 0)
+        {
+            fscanf(PDB, "%s%s", lixo, lixo);
+
+            if(strcmp(lixo, "NH1AARG") == 0 || strcmp(lixo, "NH1BARG") == 0 || strcmp(lixo, "NH2AARG") == 0 || strcmp(lixo, "NH2BARG") == 0)
+            {
+                fscanf(PDB, "%s%s%s%s%s%s%s%s%s%s", lixo, lixo, lixo, lixo, lixo, lixo, lixo, lixo, lixo, ato);
+            }
+            else
+            {
+                fscanf(PDB, "%s%s%s%s%s%s%s%s%s%s%s", lixo, lixo, lixo, lixo, lixo, lixo, lixo, lixo, lixo, lixo, ato);
+            }
+        }
+
+        if(cont == numres + 1)
+        {
+            fprintf(INP, "%3s ", res);
+            numres = cont;
+            if(cont%15 == 0)
+            {
+                fprintf(INP, "\n");
+            }
+        }
+
+    }
+
+    fclose(PDB);
+    fclose(INP);
+
+    printf("%s", exito);
+}
+
+/*********************************************************************************************************************/
+/**                                                                                                                 **/
+/**  Sugestão para a próxima versão: permitir que o usuário escolha entre colocar o tamanho de caixa ou que o pro-  **/
+/**  grama calcule um tamanho de caixa para a simulação automáticamente                                             **/
+/**                                                                                                                 **/
+/*********************************************************************************************************************/
