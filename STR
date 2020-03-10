@@ -1,0 +1,395 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+#include <string.h>
+
+#define TRUE 1
+#define MAX 100
+#define PI 3.141592
+
+void lista(int a, char *b); /* Função para gerar a lista de comandos de solvatação */
+void listaclor(int a, char *b); /* Função para gerar a lista de comandos para colocação dos íons cloreto */
+void listasodi(int a, char *b); /* Função para gerar a lista de comandos para colocação dos íons sódio */
+
+/***************************************************************************************************/
+/**                                                                                               **/
+/**  Este código servirá para gerar o arquivo com a configuração inicial da proteína CG, três op  **/
+/**  ções serão fornecidas ao usuário nessa primeira versão, futuras versões incluirão outras.    **/
+/**  Além disso, o código já fará a solvatação da proteína na caixa de simulação de acordo com o  **/
+/**  informado no arquivo de input sobre a quantidade de partículas de água para a solvatação     **/
+/**                                                                                               **/
+/***************************************************************************************************/
+
+void main(int argc, char **argv)
+{
+    char ent[] = "-f"; /* Comparação para identificar onde está o arquivo de entrada */
+    char *arqent; /* Nome do arquivo de entrada */
+    char sai[] = "-o"; /* Comparação para identificar onde está o arquivo de saída */
+    char *arqsai; /* Nome do arquivo de saída */
+    char *res[30]; /* Vetor para guardar as abreviações de todos os possíveis resíduos */
+    char verif[4]; /* String para verificação da extensão do arquivo */
+    char verinp[] = ".inp"; /* Verificador da extensão .inp */
+    char vergro[] = ".gro"; /* Verificador da extensão .gro */
+    char erroarq[] = "ERRO: Arquivo de entrada não especificado.\n";
+    char erroinp[] = "ERRO: Extensão do arquivo de entrada incorreta.\n";
+    char erronum[] = "ERRO: A opção fornecida não é adequada.\n";
+    char erroarg[] = "ERRO: Número de argumentos inconsistente.\n";
+    char lido[MAX]; /* String para leitura */
+    char lixo[MAX]; /* String para descarte de informações */
+    char command[MAX]; /* String para o comando no gromacs */
+    char ultag[MAX]; /* Última água */
+    FILE *INP; /* Arquivo de input */
+    FILE *OUT; /* Arquivo de saída */
+    FILE *LIS; /* Lista de comandos */
+    int cont; /* Contador geral */
+    int compe, comps; /* Variáveis para medir o comprimento das strings dos arquivos de entrada e da saída */
+    int sto; /* Controle de parada nos loops while */
+    int f, o; /* Variáveis para identificação da entrada e da saída */
+    int opc; /* Guarda a opção escolhida pelo usuário para a estrutura da proteína */
+    int numres, npa; /* Número de resíduos e número de partículas de água */
+    int carga; /* Íons necessários para a neutralização da caixa */
+    float tam, ph; /* Tamanho da caixa e pH */
+
+    arqent = "";
+    arqsai = "";
+    f = 0;
+    o = 0;
+
+    /* Sistema de proteção contra entradas incorretas e loop para leitura do arquivo de entrada e de saída */
+    if(argc%2 == 0 || argc == 1)
+    {
+        printf("%s", erroarg);
+        exit(EXIT_FAILURE);
+    }
+
+    for(cont = 0; cont < argc; cont++)
+    {
+        if(strcmp(argv[cont], ent) == 0)
+        {
+            f = cont + 1;
+            arqent = argv[f];
+        }
+        if(strcmp(argv[cont], sai) == 0)
+        {
+            o = cont + 1;
+            arqsai = argv[o];
+        }
+    }
+
+    if(f%2 != 0 || arqent == "" || strcmp(arqent, sai) == 0 || f == 0)
+    {
+        printf("%s", erroarq);
+        exit(EXIT_FAILURE);
+    }
+
+    compe = strlen(arqent);
+    comps = strlen(arqsai);
+
+    /* Teste da extensão dos arquivos de entrada e de saída */
+    if(strcmp(strcpy(verif, &arqent[compe - 4]), verinp) != 0)
+    {
+        printf("%s", erroinp);
+        exit(EXIT_FAILURE);
+    }
+    else if(strcmp(arqsai, "") != 0)
+    {
+        if(strcmp(strcpy(verif, &arqsai[comps - 4]), vergro) != 0)
+        {
+            strcat(arqsai, vergro);
+        }
+    }
+    else if(strcmp(arqsai, "") == 0)
+    {
+        arqsai = "output.gro";
+    }
+
+    /* Fim da sessão de proteção e leitura dos arquivos de entrada e saída */
+
+    /* Preenchendo o vetor com os nomes dos resíduos */
+
+    res[1] = "ALA";
+    res[2] = "ARG";
+    res[3] = "ASN";
+    res[4] = "ASP";
+    res[5] = "CYS";
+    res[6] = "GLU";
+    res[7] = "GLN";
+    res[8] = "GLY";
+    res[9] = "HIS";
+    res[10] = "ILE";
+    res[11] = "LEU";
+    res[12] = "LYS";
+    res[13] = "MET";
+    res[14] = "PHE";
+    res[15] = "PRO";
+    res[16] = "SER";
+    res[17] = "THR";
+    res[18] = "TRP";
+    res[19] = "TYR";
+    res[20] = "VAL";
+    res[21] = "H2O";
+    res[22] = "CL-";
+    res[23] = "NA+";
+
+    printf("Estruturas disponiveis:\n\n1 - Helicoide\n2 - Intestino\n3 - Zig zag\n\nEstrutura escolhida: ");
+    scanf("%d", &opc);
+
+    /* Sistema de proteção a entradas incorretas */
+    if(isnan(opc) != 0 || opc > 3 || opc < 1)
+    {
+        printf("%s", erronum);
+        exit(EXIT_FAILURE);
+    }
+
+    /* Vamos começar a construir o arquivo de saída para a proteína isolada */
+    INP = fopen(arqent, "r");
+    OUT = fopen("temp.gro", "w");
+
+    fscanf(INP, "%s", lido);
+    if(strcmp(lido, "TITLE") == 0)
+    {
+        fclose(INP);
+        INP = fopen(arqent, "r");
+        fscanf(INP, "%[^\n]%*c", lixo);
+        fscanf(INP, "%d %f %f %d %d", &numres, &tam, &ph, &npa, &carga);
+    }
+    else
+    {
+        fclose(INP);
+        INP = fopen(arqent, "r");
+        fscanf(INP, "%d %f %f %d", &numres, &tam, &ph, &npa);
+    }
+
+    fprintf(OUT, "Protein coarse-grained\n%5d\n", numres);
+
+    if(opc == 1)
+    {
+        float X, Y, Z; /* Coordenadas dos resíduos */
+        float phi, dphi; /* Ângulo e incremento do ângulo */
+        float delta; /* Incremento de altura */
+
+        Z = tam/2.0 - tam/3.0;
+        phi = 0.0;
+        dphi = 0.15;
+        delta = 0.012;
+
+
+        for(cont = 1; cont <= numres; cont++)
+        {
+            X = (tam/2.0) + ((tam/2.0) - 1.0)*cos(phi);
+            Y = (tam/2.0) + ((tam/2.0) - 1.0)*sin(phi);
+
+            fscanf(INP, "%s", lido);
+            fprintf(OUT, "%5d%-5s%5s%5d%8.3f%8.3f%8.3f\n", 1, "PROCG", lido, cont, X, Y, Z);
+
+            Z = Z + delta;
+            phi = phi + dphi;
+        }
+    }
+    else if(opc == 2)
+    {
+        float X, Y, Z; /* Coordenadas dos resíduos */
+        int phi, delta; /* Espaçamento angular e incremento */
+        int traj, k, vol; /* Controle da trajetória */
+
+        phi = 0.;
+        delta = 10;
+        traj = 1;
+        vol = 1;
+        k = 0;
+        X = ((tam/2.0) - 1.0)*cos(phi/100.0) + (tam/2.0);
+        Y = ((tam/2.0) - 1.0)*sin(phi/100.0) + (tam/2.0);
+        Z = 0.5;
+
+        for(cont = 1; cont <= numres; cont++)
+        {
+            fscanf(INP, "%s", lido);
+            fprintf(OUT, "%5d%-5s%5s%5d%8.3f%8.3f%8.3f\n", 1, "PROCG", lido, cont, X, Y, Z);
+
+            if(traj == 1 && phi == 0) /* Mudança para trajetória reta */
+            {
+                traj = 2;
+                k = cont;
+                vol = 1;
+            }
+            else if(traj == 1 && phi == 500) /* Mudança para trajetória reta */
+            {
+                traj = 2;
+                k = cont;
+                vol = -1;
+            }
+            else if(traj == 2 && cont == k + 4) /* Mudança para trajetória curva */
+            {
+                traj = 1;
+            }
+
+            if(traj == 1)
+            {
+                phi = phi + vol*delta;
+                X = ((tam/2.0) - 1.0)*cos(phi/100.0) + (tam/2.0);
+                Y = ((tam/2.0) - 1.0)*sin(phi/100.0) + (tam/2.0);
+            }
+
+            if(traj == 2)
+            {
+                Z = Z + 0.2;
+            }
+        }
+
+    }
+    else if(opc == 3)
+    {
+        float X, Y, Z; /* Coordenadas dos resíduos */
+        int traj, k, vol, ext1; /* Controle da trajetória */
+
+        X = 1.0;
+        Y = 1.0;
+        Z = 1.0;
+        traj = 1;
+        vol = 1;
+
+        for(cont = 1; cont <= numres; cont++)
+        {
+            fscanf(INP, "%s", lido);
+            fprintf(OUT, "%5d%-5s%5s%5d%8.3f%8.3f%8.3f\n", 1, "PROCG", lido, cont, X, Y, Z);
+
+            if(traj == 1 && (tam - Y < 1.0 || Y < 1.0))
+            {
+                traj = 2;
+                k = cont;
+
+                if(vol == 1)
+                {
+                    vol = -1;
+                }
+                else if(vol == -1)
+                {
+                    vol = 1;
+                }
+            }
+            else if(traj == 2 && cont == k + 4)
+            {
+                traj = 1;
+            }
+
+            if(traj == 1)
+            {
+                Y = Y + vol*0.2;
+            }
+            else if(traj == 2)
+            {
+                X = X + (0.2/sqrt(2.0));
+                Z = Z + (0.2/sqrt(2.0));
+            }
+        }
+    }
+
+    fprintf(OUT, "%10.5lf%10.5lf%10.5lf\n", tam, tam ,tam);
+    fclose(OUT);
+    fclose(INP);
+
+    strcpy(command, "editconf -f temp.gro -o ");
+    strcat(command, arqsai);
+    system(command);
+
+    remove("temp.gro");
+
+    /* Sessão para solvatar a molécula de proteína coarse grained */
+    if(carga > 0)
+    {
+        lista(npa - carga, arqsai);
+    }
+    else if (carga < 0)
+    {
+        lista(npa + carga, arqsai);
+    }
+    LIS = fopen("lista.txt", "r");
+
+    for(cont = 1; cont <= 2*npa; cont++)
+    {
+        fscanf(LIS, "%[^\n]%*c", command);
+        system(command);
+    }
+
+    fclose(LIS);
+    remove("lista.txt");
+
+    if(carga > 0)
+    {
+        listaclor(carga, arqsai);
+    }
+    else if(carga < 0)
+    {
+        listasodi(carga, arqsai);
+        carga = -carga;
+    }
+
+    LIS = fopen("lista.txt", "r");
+
+    for(cont = 1; cont <= 2*carga; cont++)
+    {
+        fscanf(LIS, "%[^\n]%*c", command);
+        system(command);
+    }
+
+    fclose(LIS);
+    remove("lista.txt");
+}
+
+void lista(int a, char *b)
+{
+    int cont; /* Contador para o comando */
+    FILE *SAI; /* Arquivo de saída para lista */
+
+    SAI = fopen("lista.txt", "w");
+    fprintf(SAI, "gmx insert-molecules -f %s -ci water.gro -o solv%d.gro -nmol 1 -allpair -try 1000000\nrm %s\n", b, 1, b);
+
+
+    for(cont = 1; cont < a - 1; cont ++)
+    {
+        fprintf(SAI, "gmx insert-molecules -f solv%d.gro -ci water.gro -o solv%d.gro -nmol 1 -allpair -try 1000000\nrm solv%d.gro\n", cont, cont + 1, cont);
+    }
+
+    fprintf(SAI, "gmx insert-molecules -f solv%d.gro -ci water.gro -o %s -nmol 1 -allpair -try 1000000\nrm solv%d.gro\n", cont, b, cont);
+
+    fclose(SAI);
+}
+
+void listaclor(int a, char *b)
+{
+    int cont; /* Contador para o comando */
+    FILE *SAI; /* Arquivo de saída para lista */
+
+    SAI = fopen("lista.txt", "w");
+    fprintf(SAI, "gmx insert-molecules -f %s -ci cloreto.gro -o solv%d.gro -nmol 1 -allpair -try 1000000\nrm %s\n", b, 1, b);
+
+
+    for(cont = 1; cont < a - 1; cont ++)
+    {
+        fprintf(SAI, "gmx insert-molecules -f solv%d.gro -ci cloreto.gro -o solv%d.gro -nmol 1 -allpair -try 1000000\nrm solv%d.gro\n", cont, cont + 1, cont);
+    }
+
+    fprintf(SAI, "gmx insert-molecules -f solv%d.gro -ci cloreto.gro -o %s -nmol 1 -allpair -try 1000000\nrm solv%d.gro\n", cont, b, cont);
+
+    fclose(SAI);
+}
+
+void listasodi(int a, char *b)
+{
+    int cont; /* Contador para o comando */
+    FILE *SAI; /* Arquivo de saída para lista */
+
+    SAI = fopen("lista.txt", "w");
+    a = -a;
+    fprintf(SAI, "gmx insert-molecules -f %s -ci sodio.gro -o solv%d.gro -nmol 1 -allpair -try 1000000\nrm %s\n", b, 1, b);
+
+
+    for(cont = 1; cont < a - 1; cont ++)
+    {
+        fprintf(SAI, "gmx insert-molecules -f solv%d.gro -ci sodio.gro -o solv%d.gro -nmol 1 -allpair -try 1000000\nrm solv%d.gro\n", cont, cont + 1, cont);
+    }
+
+    fprintf(SAI, "gmx insert-molecules -f solv%d.gro -ci sodio.gro -o %s -nmol 1 -allpair -try 1000000\nrm solv%d.gro\n", cont, b, cont);
+
+    fclose(SAI);
+}
