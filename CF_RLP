@@ -1,0 +1,1016 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+
+#define TRUE 1
+#define PI 3.1415926535
+#define MAX 200
+
+float hidro(float a);
+
+/******************************************************************************************/
+/**                                                                                      **/
+/** Campo de forças para proteínas coarse-grained baseado no trabalho iniciado pelo Luis **/
+/** Essa versão foi feita para implementar os volumes moleculares dos amino ácidos como  **/
+/** fontes para o cálculo do sigma. Além disso, o código está gerando os arquivos .mdp   **/
+/**                                                                                      **/
+/******************************************************************************************/
+
+void main(int argc, char **argv)
+{
+    char *res[30]; /* Armazenamento das siglas de cada resíduo */
+    char *arqent = ""; /* Arquivo de entrada */
+    char ent[] = "-f"; /* String para comparação e identificação do arquivo de entrada */
+    char erroarg[] = "ERRO: Número de argumentos inconsistente.\n";
+    char erroinp[] = "ERRO: Arquivo de entrada com a extensão incorreta.\n";
+    char erroent[] = "ERRO: Arquivo de entrada não especificado.\n";
+    char exito[] = "Arquivos gerados com exito.";
+    char verinp[] = ".inp";
+    char verif[4]; /* String para verificação da extensão do arquivo de entrada */
+    char lido[MAX]; /* String para leitura */
+    char lixo[MAX]; /* String para jogar informações inúteis fora */
+    FILE *ATP; /* Arquivo de saída com os tipos de partículas do campo de força */
+    FILE *INP; /* Arquivo de entrada com os dados da proteína */
+    FILE *OUT; /* Arquivo de input modificado com o número de partículas de água sugerido */
+    FILE *PTO; /* Arquivo de topologia da proteína - Protein Topology */
+    FILE *TOP; /* Arquivo global de topologia */
+    FILE *WAT; /* Arquivo com uma água para solvatar */
+    FILE *WTO; /* Arquivo de topologia da água - Water topology */
+    FILE *TAB; /* Arquivo com a tabela para o potencial LJ12-4 */
+    FILE *MDP; /* Arquivo com os parâmetros da simulação: minimização e ensemble NPT */
+    FILE *NDX; /* Arquivo index para diferenciar as interações */
+    float par[MAX][MAX]; /* Matriz para armazenar os dados físico-químicos dos aminoácidos */
+    float r; /* Parâmetros para cálcular as funções do potencial LJ 12-4 */
+    float ph, tam; /* pH da simulação e o tamanho da caixa */
+    float mas; /* Massa da proteína para sugerir a quantidade de partículas de água */
+    float masb; /* Massa da BSA */
+    float agu; /* Massa de água */
+    float conc; /* Concentração de proteína */
+    float conv = (3./4.)*(1./PI); /* Fator de conversão do volume para o cálculo do raio no sigma */
+    float hid; /* Parâmetro de hidrofobicidade */
+    float pos, neg, posr, negr, posres, negres; /* Contadores de carga */
+    float aju = 0.82; /* Parâmetro de ajuste dos sigmas */
+    float aje = 1.0; /* Parâmetros de ajuste dos epsilons */
+    int cont, ind, sof; /* Contadores */
+    int f = 0; /* Índice do arquivo de entrada */
+    int compe; /* Comprimento do string do arquivo de entrada */
+    int npa; /* Número de partículas de água */
+    int numres; /* Quantidade de resíduos */
+    int k; /* Variável para identificar o resíduo da proteína lido */
+    int carga; /* Carga da proteína */
+
+    /* Zerando os contadores de carga */
+    neg = 0;
+    pos = 0;
+    posr = 0;
+    negr = 0;
+    posres = 0;
+    negres = 0;
+
+    /* Sistema de proteção contra o usuário e leitura do arquivo de entrada */
+    if(argc%2 == 0)
+    {
+        printf("%s", erroarg);
+        exit(EXIT_FAILURE);
+    }
+
+    for(cont = 0; cont <= 2; cont++)
+    {
+        if(strcmp(argv[cont], ent) == 0)
+        {
+            f = cont + 1;
+            arqent = argv[f];
+        }
+    }
+
+    if(f%2 != 0 || arqent == "" || f == 0)
+    {
+        printf("%s", erroent);
+        exit(EXIT_FAILURE);
+    }
+
+    compe = strlen(arqent);
+
+    if(strcmp(strcpy(verif, &arqent[compe - 4]), verinp) != 0)
+    {
+        printf("%s", erroinp);
+        exit(EXIT_FAILURE);
+    }
+
+    /* Fim do sistema de proteção e da leitura do arquivo de entrada */
+
+    /* Vamos ler os parâmetros inicias do arquivo de input */
+    INP = fopen(arqent, "r");
+    fscanf(INP, "%s", lido);
+
+    if(strcmp(lido, "TITLE") == 0)
+    {
+        fscanf(INP, "%[^\n]%*c", lixo);
+    }
+    else
+    {
+        fclose(INP);
+        INP = fopen(arqent, "r");
+    }
+
+    fscanf(INP, "%d %f %f", &numres, &tam, &ph);
+
+    /* Inicializando o vetor de siglas de resíduos */
+    res[1] = "ALA";
+    res[2] = "ARG";
+    res[3] = "ASN";
+    res[4] = "ASP";
+    res[5] = "CYS";
+    res[6] = "GLU";
+    res[7] = "GLN";
+    res[8] = "GLY";
+    res[9] = "HIS";
+    res[10] = "ILE";
+    res[11] = "LEU";
+    res[12] = "LYS";
+    res[13] = "MET";
+    res[14] = "PHE";
+    res[15] = "PRO";
+    res[16] = "SER";
+    res[17] = "THR";
+    res[18] = "TRP";
+    res[19] = "TYR";
+    res[20] = "VAL";
+    res[21] = "H2O"; /* Água */
+    res[22] = "CL-"; /* Cloreto */
+    res[23] = "NA+"; /* Sódio */
+
+    /* Os parâmetros de cada aminoácido serão colocados seguindo a ordem do vetor res */
+    /* Parâmetros para o resíduo Alanina */
+    par[1][1] = 1.80;  /* Hidropatia: Quanto mais alto o valor, mais hidrofóbico é o residuo */
+    par[1][2] = 2.33;  /* pKA da carboxila */
+    par[1][3] = 9.71;  /* pKA da amina */
+    par[1][4] = NAN;   /* pKA da cadeia lateral */
+    par[1][5] = 6.00;  /* Ponto isoelétrico */
+    par[1][6] = 71.08; /* Massa molar do resíduo */
+    par[1][7] = 0.092;  /* Volume em nm³ */
+    par[1][8] = 2*cbrt(conv*par[1][7]); /* Sigma */
+    par[1][9] = 2.47882; /* Epsilon */
+    par[1][10] = NAN; /* Parâmetro ni da equação de Henderson-Hasselbach */
+
+    /* Parâmetros para o resíduo Arginina */
+    par[2][1] = -4.50;
+    par[2][2] = 2.03;
+    par[2][3] = 9.00;
+    par[2][4] = 12.10;
+    par[2][5] = 10.76;
+    par[2][6] = 156.18;
+    par[2][7] = 0.225;
+    par[2][8] = 2*cbrt(conv*par[2][7]);
+    par[2][9] = 2.47882;
+    par[2][10] = 1;
+
+    /* Parâmetros para o resíduo Asparagina */
+    par[3][1] = -3.50;
+    par[3][2] = 2.16;
+    par[3][3] = 8.76;
+    par[3][4] = NAN;
+    par[3][5] = 5.41;
+    par[3][6] = 114.10;
+    par[3][7] = 0.135;
+    par[3][8] = 2*cbrt(conv*par[3][7]);
+    par[3][9] = 2.47882;
+    par[3][10] = NAN;
+
+    /* Parâmetros para o resíduo Ácido Aspártico */
+    par[4][1] = -3.50;
+    par[4][2] = 1.95;
+    par[4][3] = 9.66;
+    par[4][4] = 3.71;
+    par[4][5] = 2.77;
+    par[4][6] = 115.09;
+    par[4][7] = 0.125;
+    par[4][8] = 2*cbrt(conv*par[4][7]);
+    par[4][9] = 2.47882;
+    par[4][10] = -1;
+
+    /* Parâmetros para o resíduo Cisteína */
+    par[5][1] = 2.50;
+    par[5][2] = 1.91;
+    par[5][3] = 10.28;
+    par[5][4] = 8.14;
+    par[5][5] = 5.07;
+    par[5][6] = 103.14;
+    par[5][7] = 0.106;
+    par[5][8] = 2*cbrt(conv*par[5][7]);
+    par[5][9] = 2.47882;
+    par[5][10] = -1;
+
+    /* Parâmetros para o resíduo Ácido Glutâmico */
+    par[6][1] = -3.50;
+    par[6][2] = 2.16;
+    par[6][3] = 9.58;
+    par[6][4] = 4.15;
+    par[6][5] = 3.22;
+    par[6][6] = 129.11;
+    par[6][7] = 0.155;
+    par[6][8] = 2*cbrt(conv*par[6][7]);
+    par[6][9] = 2.47882;
+    par[6][10] = -1;
+
+    /* Parâmetross para o resíduo Glutamina */
+    par[7][1] = -3.50;
+    par[7][2] = 2.18;
+    par[7][3] = 9.00;
+    par[7][4] = NAN;
+    par[7][5] = 5.65;
+    par[7][6] = 128.13;
+    par[7][7] = 0.161;
+    par[7][8] = 2*cbrt(conv*par[7][7]);
+    par[7][9] = 2.47882;
+    par[7][10] = NAN;
+
+    /* Parâmetros para o resíduo Glicina */
+    par[8][1] = -0.40;
+    par[8][2] = 2.34;
+    par[8][3] = 9.58;
+    par[8][4] = NAN;
+    par[8][5] = 5.97;
+    par[8][6] = 57.05;
+    par[8][7] = 0.066;
+    par[8][8] = 2*cbrt(conv*par[8][7]);
+    par[8][9] = 2.47882;
+    par[8][10] = NAN;
+
+    /* Parâmetros para o resíduo Histidina */
+    par[9][1] = -3.20;
+    par[9][2] = 1.70;
+    par[9][3] = 9.09;
+    par[9][4] = 6.04;
+    par[9][5] = 7.59;
+    par[9][6] = 137.14;
+    par[9][7] = 0.167;
+    par[9][8] = 2*cbrt(conv*par[9][7]);
+    par[9][9] = 2.47882;
+    par[9][10] = 1;
+
+    /* Parâmetros para o resíduo Isoleucina */
+    par[10][1] = 4.50;
+    par[10][2] = 2.26;
+    par[10][3] = 9.60;
+    par[10][4] = NAN;
+    par[10][5] = 6.02;
+    par[10][6] = 113.16;
+    par[10][7] = 0.169;
+    par[10][8] = 2*cbrt(conv*par[10][7]);
+    par[10][9] = 2.47882;
+    par[10][10] = NAN;
+
+    /* Parâmetros para o resíduo Leucina */
+    par[11][1] = 3.80;
+    par[11][2] = 2.32;
+    par[11][3] = 9.58;
+    par[11][4] = NAN;
+    par[11][5] = 5.98;
+    par[11][6] = 113.16;
+    par[11][7] = 0.168;
+    par[11][8] = 2*cbrt(conv*par[11][7]);
+    par[11][9] = 2.47882;
+    par[11][10] = NAN;
+
+    /* Parâmetros para o resíduo Lisina */
+    par[12][1] = -3.90;
+    par[12][2] = 2.15;
+    par[12][3] = 9.16;
+    par[12][4] = 10.67;
+    par[12][5] = 9.74;
+    par[12][6] = 128.17;
+    par[12][7] = 0.171;
+    par[12][8] = 2*cbrt(conv*par[12][7]);
+    par[12][9] = 2.47882;
+    par[12][10] = 1;
+
+    /* Parâmetros para o resíduo Metionina */
+    par[13][1] = 1.90;
+    par[13][2] = 2.16;
+    par[13][3] = 9.08;
+    par[13][4] = NAN;
+    par[13][5] = 5.74;
+    par[13][6] = 131.19;
+    par[13][7] = 0.171;
+    par[13][8] = 2*cbrt(conv*par[13][7]);
+    par[13][9] = 2.47882;
+    par[13][10] = NAN;
+
+    /* Parâmetros para o resíduo Fenilalanina */
+    par[14][1] = 2.80;
+    par[14][2] = 2.18;
+    par[14][3] = 9.09;
+    par[14][4] = NAN;
+    par[14][5] = 5.48;
+    par[14][6] = 147.17;
+    par[14][7] = 0.203;
+    par[14][8] = 2*cbrt(conv*par[14][7]);
+    par[14][9] = 2.47882;
+    par[14][10] = NAN;
+
+    /* Parâmetros para o resíduo Prolina */
+    par[15][1] = -1.60;
+    par[15][2] = 1.95;
+    par[15][3] = 10.47;
+    par[15][4] = NAN;
+    par[15][5] = 6.30;
+    par[15][6] = 97.11;
+    par[15][7] = 0.129;
+    par[15][8] = 2*cbrt(conv*par[15][7]);
+    par[15][9] = 2.47882;
+    par[15][10] = NAN;
+
+    /* Parâmetros para o resíduo Serina */
+    par[16][1] = -0.80;
+    par[16][2] = 2.13;
+    par[16][3] = 9.05;
+    par[16][4] = NAN;
+    par[16][5] = 5.68;
+    par[16][6] = 87.07;
+    par[16][7] = 0.099;
+    par[16][8] = 2*cbrt(conv*par[16][7]);
+    par[16][9] = 2.47882;
+    par[16][10] = NAN;
+
+    /* Parâmetros para o resíduo Treonina */
+    par[17][1] = -0.70;
+    par[17][2] = 2.20;
+    par[17][3] = 8.96;
+    par[17][4] = NAN;
+    par[17][5] = 5.60;
+    par[17][6] = 101.10;
+    par[17][7] = 0.122;
+    par[17][8] = 2*cbrt(conv*par[17][7]);
+    par[17][9] = 2.47882;
+    par[17][10] = NAN;
+
+    /* Parâmetros para o resíduo Triptofano */
+    par[18][1] = -0.90;
+    par[18][2] = 2.38;
+    par[18][3] = 9.34;
+    par[18][4] = NAN;
+    par[18][5] = 5.89;
+    par[18][6] = 186.21;
+    par[18][7] = 0.240;
+    par[18][8] = 2*cbrt(conv*par[18][7]);
+    par[18][9] = 2.47882;
+    par[18][10] = NAN;
+
+    /* Parâmetros para o resíduo Tirosina */
+    par[19][1] = -1.30;
+    par[19][2] = 2.24;
+    par[19][3] = 9.04;
+    par[19][4] = 10.10;
+    par[19][5] = 5.66;
+    par[19][6] = 163.17;
+    par[19][7] = 0.203;
+    par[19][8] = 2*cbrt(conv*par[19][7]);
+    par[19][9] = 2.47882;
+    par[19][10] = -1;
+
+    /* Parâmetros para o resíduo Valina */
+    par[20][1] = 4.20;
+    par[20][2] = 2.27;
+    par[20][3] = 9.52;
+    par[20][4] = NAN;
+    par[20][5] = 5.96;
+    par[20][6] = 99.13;
+    par[20][7] = 0.142;
+    par[20][8] = 2*cbrt(conv*par[20][7]);
+    par[20][9] = 2.47882;
+    par[20][10] = NAN;
+
+    /* Parâmetros para a água */
+    par[21][1] = 0;
+    par[21][2] = 0;
+    par[21][3] = 0;
+    par[21][4] = 0;
+    par[21][5] = 0;
+    par[21][6] = 54.0;
+    par[21][7] = 0.4371;
+    par[21][8] = 0.4371;
+    par[21][9] = 3.74468;
+
+    /* Parâmetros para o cloreto */
+    par[22][1] = 0;
+    par[22][2] = 0;
+    par[22][3] = 0;
+    par[22][4] = 0;
+    par[22][5] = 0;
+    par[22][6] = 35.45300;
+    par[22][7] = 0.441724;
+    par[22][8] = 0.441724;
+    par[22][9] = 0.492833;
+
+    /* Parâmetros para o sódio */
+    par[23][1] = 0;
+    par[23][2] = 0;
+    par[23][3] = 0;
+    par[23][4] = 0;
+    par[23][5] = 0;
+    par[23][6] = 22.98977;
+    par[23][7] = 0.333045;
+    par[23][8] = 0.333045;
+    par[23][9] = 0.0115980;
+
+    /* Vamos calcular as cargas parciais para cada resíduo que possui cadeia lateral ionizável */
+    for(cont = 1; cont <= 20; cont++)
+    {
+        if(isnan(par[cont][10]) == 0) /* Se existir pKa, ou seja, se a cadeia for ionizável */
+        {
+            if(par[cont][10] == 1) /* Cadeia lateral básica */
+            {
+                par[cont][11] = pow(10, (par[cont][4] - ph)/1)/(1 + pow(10, (par[cont][4] - ph)/1));
+            }
+            else if(par[cont][10] == -1)
+            {
+                par[cont][11] = (pow(10, (par[cont][4] - ph)/-1)/(1 + pow(10, (par[cont][4] - ph)/-1)))*(-1);
+            }
+
+            par[cont][11] = round(par[cont][11]*1000)/1000; /* Arredondando para três casas */
+        }
+    }
+
+    /* Vamos contar a quantidade de cada resíduo para a normalização das cargas parciais */
+    for(cont = 1; cont <= 20; cont++) /* Zerando os contadores de cada resíduo */
+    {
+        par[cont][12] = 0;
+        par[cont][8] = aju*par[cont][8];
+        par[cont][9] = aje*par[cont][9];
+    }
+
+    mas = 0;
+
+    for(cont = 1; cont <= numres; cont++)
+    {
+        fscanf(INP, "%s", lido);
+        for(ind = 1; ind <= 20; ind++)
+        {
+            k = strcmp(lido, res[ind]);
+
+            if(k == 0)
+            {
+                par[ind][12] = par[ind][12] + 1;
+                mas = mas + par[ind][6]; /* Aproveitando para já calcular a massa molar da proteína */
+                break;
+            }
+        }
+
+    }
+
+    /* Agora podemos contar qual o total de cargas positivas e o total de cargas negativas na proteína */
+    for(cont = 1; cont <= 20; cont++)
+    {
+        if(par[cont][11] > 0)
+        {
+            pos = pos + par[cont][11]*par[cont][12];
+        }
+        else if(par[cont][11] < 0)
+        {
+            neg = neg + par[cont][11]*par[cont][12];
+        }
+    }
+
+    /* Vamos agora arredondar para uma carga inteira */
+    ind = 1;
+    printf("\npos = %f  neg = %f\n\n", pos, neg);
+
+    while(pos - (int)pos >= 0.0001)
+    {
+        posr = round(pos);
+        printf("pos = %f  e  posr = %f\n", pos, posr);
+
+        if(ind == 30)
+        {
+            if(pos - (int)pos > 0.5)
+            {
+                posres = 1 - (pos - (int)pos); /* Carga residual que vai para o terminal amina */
+                break;
+            }
+            else
+            {
+                negres = -(pos - (int)pos); /* Carga residual que vai para o terminal carboxila */
+                break;
+            }
+        }
+
+        for(cont = 1; cont <= 20; cont++)
+        {
+            if(par[cont][11] > 0)
+            {
+               par[cont][11] = (posr/pos)*par[cont][11];
+               par[cont][11] = round(par[cont][11]*1000)/1000;
+            }
+        }
+
+        pos = 0;
+
+        for(cont = 1; cont <= 20; cont++)
+        {
+            if(par[cont][11] > 0)
+            {
+                pos = pos + par[cont][11]*par[cont][12];
+            }
+        }
+
+        ind = ind + 1;
+    }
+
+    ind = 1;
+
+    while(-neg + (int)neg >= 0.0001)
+    {
+        negr = round(neg);
+        printf("neg = %f  e  negr = %f\n", neg, negr);
+
+        if(ind == 30)
+        {
+            if(-neg + (int)neg > 0.5)
+            {
+                negres = negres + 1 + neg - (int)neg;
+                break;
+            }
+            else
+            {
+                posres = posres + -(neg - (int)neg); /* Carga residual que vai para o terminal amina */
+                break;
+            }
+        }
+
+        for(cont = 1; cont <= 20; cont++)
+        {
+            if(par[cont][11] < 0)
+            {
+                par[cont][11] = (negr/neg)*par[cont][11];
+                par[cont][11] = round(par[cont][11]*1000)/1000;
+            }
+        }
+
+        neg = 0;
+
+        for(cont = 1; cont <= 20; cont++)
+        {
+            if(par[cont][11] < 0)
+            {
+                neg = neg + par[cont][11]*par[cont][12];
+            }
+        }
+
+        ind = ind + 1;
+    }
+
+    fclose(INP);
+
+    /* Vamos ler os parâmetros inicias do arquivo de input */
+    INP = fopen(arqent, "r");
+    fscanf(INP, "%s", lido);
+
+    if(strcmp(lido, "TITLE") == 0)
+    {
+        fscanf(INP, "%[^\n]%*c", lixo);
+    }
+    else
+    {
+        fclose(INP);
+        INP = fopen(arqent, "r");
+    }
+
+    fscanf(INP, "%d %f %f", &numres, &tam, &ph);
+
+    /* Vamos escrever o arquivo de tipos de partículas do campo de forças */
+    ATP = fopen("atomtypes.itp", "w");
+    fprintf(ATP, "; Conjunto de partículas do campo de forças\n\n");
+    fprintf(ATP, "[ defaults ]\n1\t1\tyes\t0.5\t0.5\n\n"); /* Explicação dos parâmetros: 1) Potencial LJ; 2) Regra de mistura; 3) Gerar pares de interação 1-4; 4) Fator multiplicativo para os pares 1-4 (VdW); 5) Fator multiplicativo para os pares 1-4 (eletrostático); */
+    fprintf(ATP, "[ atomtypes ]\n");
+
+    for(cont = 1; cont <= 23; cont++)
+    {
+        if(res[cont] != "H2O" && res[cont] != "CL-" && res[cont] != "NA+")
+        {
+            fprintf(ATP, "%3s   %3s%14.6f%7.3f A %12.6e %12.6e\n", res[cont], res[cont], par[cont][6], par[cont][11], (4*par[cont][9]*pow(par[cont][8], 6)), (4*par[cont][9]*pow(par[cont][8], 12)));
+            fprintf(ATP, "%3sC  %3sC%13.6f%7.3f A %12.6e %12.6e\n", res[cont], res[cont], par[cont][6], pow((par[cont][11] - 1 + negres), 2), (4*par[cont][9]*pow(par[cont][8], 6)), (4*par[cont][9]*pow(par[cont][8], 12))); /* Terminal Carboxila */
+            fprintf(ATP, "%3sA  %3sA%13.6f%7.3f A %12.6e %12.6e\n", res[cont], res[cont], par[cont][6], pow((par[cont][11] + 1 + posres), 2), (4*par[cont][9]*pow(par[cont][8], 6)), (4*par[cont][9]*pow(par[cont][8], 12))); /* Terminal Amina */
+        }
+        else if(res[cont] == "H2O" || res[cont] == "CL-" || res[cont] == "NA+")
+        {
+            if(res[cont] == "H2O")
+            {
+                fprintf(ATP, "%3s   %3s%14.6f%7.3f A %12.6e %12.6e\n", res[cont], res[cont], par[cont][6], 0., ((3*sqrt(3))/2)*par[cont][9]*pow(par[cont][8], 4), ((3*sqrt(3))/2)*par[cont][9]*pow(par[cont][8], 12)); /* Água */
+            }
+            else if(res[cont] == "NA+" || res[cont] == "CL-")
+            {
+                fprintf(ATP, "%3s   %3s%14.6f%7.3f A %12.6e %12.6e\n", res[cont], res[cont], par[cont][6], 1., (4*par[cont][9]*pow(par[cont][8], 6)), (4*par[cont][9]*pow(par[cont][8], 12)));
+            }
+        }
+    }
+
+    fprintf(ATP, "\n\n[ nonbond_params ]\n");
+
+    for(cont = 1; cont <= 23; cont++)
+    {
+        for(ind = cont; ind <= 23; ind++)
+        {
+            if((res[cont] == "H2O" || res[cont] == "CL-" || res[cont] == "NA+") && (res[ind] == "H2O" || res[ind] == "CL-" || res[ind] == "NA+"))
+            {
+                if(res[cont] == "H2O" || res[ind] == "H2O")
+                {
+                    fprintf(ATP, "%3s   %3s 1 %12.6e %12.6e\n", res[cont], res[ind], ((3*sqrt(3))/2)*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 4), ((3*sqrt(3))/2)*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 12));
+                }
+                else
+                {
+                    fprintf(ATP, "%3s   %3s 1 %12.6e %12.6e\n", res[cont], res[ind], (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 6)), (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 12)));
+                }
+            }
+            else if(res[ind] == "H2O" || res[ind] == "CL-" || res[ind] == "NA+")
+            {
+                if(res[ind] == "H2O")
+                {
+                    hid = hidro(par[cont][1]);
+                    fprintf(ATP, "%3s   %3s 1 %12.6e %12.6e\n", res[cont], res[ind], ((3*sqrt(3))/2)*((sqrt(par[cont][9]*par[ind][9]))/hid)*pow(((par[cont][8] + par[ind][8])/2), 4), ((3*sqrt(3))/2)*((sqrt(par[cont][9]*par[ind][9]))/hid)*pow(((par[cont][8] + par[ind][8])/2), 12));
+                    fprintf(ATP, "%3sC  %3s 1 %12.6e %12.6e\n", res[cont], res[ind], ((3*sqrt(3))/2)*((sqrt(par[cont][9]*par[ind][9]))/hid)*pow(((par[cont][8] + par[ind][8])/2), 4), ((3*sqrt(3))/2)*((sqrt(par[cont][9]*par[ind][9]))/hid)*pow(((par[cont][8] + par[ind][8])/2), 12));
+                    fprintf(ATP, "%3sA  %3s 1 %12.6e %12.6e\n", res[cont], res[ind], ((3*sqrt(3))/2)*((sqrt(par[cont][9]*par[ind][9]))/hid)*pow(((par[cont][8] + par[ind][8])/2), 4), ((3*sqrt(3))/2)*((sqrt(par[cont][9]*par[ind][9]))/hid)*pow(((par[cont][8] + par[ind][8])/2), 12));
+                }
+                else
+                {
+                    fprintf(ATP, "%3s   %3s 1 %12.6e %12.6e\n", res[cont], res[ind], (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 6)), (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 12)));
+                    fprintf(ATP, "%3sC  %3s 1 %12.6e %12.6e\n", res[cont], res[ind], (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 6)), (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 12)));
+                    fprintf(ATP, "%3sA  %3s 1 %12.6e %12.6e\n", res[cont], res[ind], (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 6)), (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 12)));
+                }
+            }
+
+            else if(res[cont] == res[ind])
+            {
+                fprintf(ATP, "%3s  %3s  1 %12.6e %12.6e\n", res[cont], res[ind], (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 6)), (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 12)));
+                fprintf(ATP, "%3s  %3sC 1 %12.6e %12.6e\n", res[cont], res[ind], (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 6)), (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 12)));
+                fprintf(ATP, "%3s  %3sA 1 %12.6e %12.6e\n", res[cont], res[ind], (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 6)), (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 12)));
+                fprintf(ATP, "%3sC %3sC 1 %12.6e %12.6e\n", res[cont], res[ind], (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 6)), (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 12)));
+                fprintf(ATP, "%3sC %3sA 1 %12.6e %12.6e\n", res[cont], res[ind], (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 6)), (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 12)));
+                fprintf(ATP, "%3sA %3sA 1 %12.6e %12.6e\n", res[cont], res[ind], (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 6)), (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 12)));
+            }
+            else
+            {
+                fprintf(ATP, "%3s  %3s  1 %12.6e %12.6e\n", res[cont], res[ind], (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 6)), (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 12)));
+                fprintf(ATP, "%3s  %3sC 1 %12.6e %12.6e\n", res[cont], res[ind], (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 6)), (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 12)));
+                fprintf(ATP, "%3s  %3sA 1 %12.6e %12.6e\n", res[cont], res[ind], (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 6)), (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 12)));
+                fprintf(ATP, "%3sC %3s  1 %12.6e %12.6e\n", res[cont], res[ind], (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 6)), (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 12)));
+                fprintf(ATP, "%3sC %3sC 1 %12.6e %12.6e\n", res[cont], res[ind], (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 6)), (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 12)));
+                fprintf(ATP, "%3sC %3sA 1 %12.6e %12.6e\n", res[cont], res[ind], (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 6)), (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 12)));
+                fprintf(ATP, "%3sA %3s  1 %12.6e %12.6e\n", res[cont], res[ind], (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 6)), (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 12)));
+                fprintf(ATP, "%3sA %3sC 1 %12.6e %12.6e\n", res[cont], res[ind], (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 6)), (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 12)));
+                fprintf(ATP, "%3sA %3sA 1 %12.6e %12.6e\n", res[cont], res[ind], (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 6)), (4*(sqrt(par[cont][9]*par[ind][9]))*pow(((par[cont][8] + par[ind][8])/2), 12)));
+            }
+        }
+    }
+
+    fclose(ATP);
+
+    /* Fim do arquivo de tipos de átomos */
+
+    /* Vamos construir o arquivo com uma "molécula" de água */
+    WAT = fopen("water.gro", "w");
+    fprintf(WAT, "Water\n    1\n    1H2O   H2O    1   3.000   3.000   3.000\n    6.00000   6.00000   6.00000");
+    fclose(WAT);
+
+    /* Fim do arquivo de água */
+
+    /* Vamos construir o arquivo com um íon CL- */
+    WAT = fopen("cloreto.gro", "w");
+    fprintf(WAT, "Cloreto\n    1\n    1CL-   CL-    1   3.000   3.000   3.000\n    6.00000   6.00000   6.00000");
+    fclose(WAT);
+
+    /* Fim do arquivo do cloreto */
+
+    /* Vamos construir o arquivo com um íon Na+ */
+    WAT = fopen("sodio.gro", "w");
+    fprintf(WAT, "Sódio\n    1\n    1NA+   NA+    1   3.000   3.000   3.000\n    6.00000   6.00000   6.00000");
+    fclose(WAT);
+
+    /* Fim do arquivo do sódio */
+
+    /* Vamos construir o arquivo com a topologia da água */
+    WTO = fopen("water.itp", "w");
+    fprintf(WTO, "[ moleculetype ]\nH2O       1\n\n[ atoms ]\n\t1\tH2O\t1\tH2O\tH2O\t1\t0.000000\t54.000");
+    fclose(WTO);
+
+    /* Fim do arquivo de topologia da água */
+
+    /* Vamos construir a topologia dos ions */
+    WTO = fopen("ions.itp", "w");
+    fprintf(WTO, "[ moleculetype ]\nCL-       1\n\n[ atoms ]\n\t1\tCL-\t1\tCL-\tCL-\t1\t-1.000000\t35.453\n\n[ moleculetype ]\nNA+       1\n\n[ atoms ]\n\t1\tNA+\t1\tNA+\tNA+\t1\t1.000000\t22.989");
+    fclose(WTO);
+
+    /* Fim do arquivo de topologia dos ions */
+
+
+    /* Vamos construir o arquivo com a tabela do potencial LJ 12-4 */
+    TAB = fopen("table.xvg", "w");
+    fprintf(TAB, "#\n# Tabela com potencial LJ 12-4\n#\n");
+
+    for(r = 0.0; r <= 3.0; r = r + 0.002)
+    {
+        if(r == 0.0)
+        {
+            fprintf(TAB, "%12.10e   %12.10e %12.10e   %12.10e %12.10e   %12.10e %12.10e\n", r, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        }
+        else
+        {
+            fprintf(TAB, "%12.10e   %12.10e %12.10e   %12.10e %12.10e   %12.10e %12.10e\n", r, 1/r, 1/pow(r, 2), -1/pow(r, 4), -4/pow(r, 5), 1/pow(r, 12), 12/pow(r, 13));
+        }
+    }
+
+    fclose(TAB);
+
+    TAB = fopen("table_Protein_Protein.xvg", "w");
+
+    fprintf(TAB, "#\n# Tabela com potencial LJ 12-6\n#\n");
+
+    for(r = 0.0; r <= 3.0; r = r + 0.002)
+    {
+        if(r == 0.0)
+        {
+            fprintf(TAB, "%12.10e   %12.10e %12.10e   %12.10e %12.10e   %12.10e %12.10e\n", r, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        }
+        else
+        {
+            fprintf(TAB, "%12.10e   %12.10e %12.10e   %12.10e %12.10e   %12.10e %12.10e\n", r, 1/r, 1/pow(r,2), -1/pow(r, 6), -6/pow(r, 7), 1/pow(r, 12), 12/pow(r, 13));
+        }
+    }
+
+    fclose(TAB);
+
+    TAB = fopen("table_Protein_Ion.xvg", "w");
+
+    fprintf(TAB, "#\n# Tabela com potencial LJ 12-6\n#\n");
+
+    for(r = 0.0; r <= 3.0; r = r + 0.002)
+    {
+        if(r == 0.0)
+        {
+            fprintf(TAB, "%12.10e   %12.10e %12.10e   %12.10e %12.10e   %12.10e %12.10e\n", r, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        }
+        else
+        {
+            fprintf(TAB, "%12.10e   %12.10e %12.10e   %12.10e %12.10e   %12.10e %12.10e\n", r, 1/r, 1/pow(r,2), -1/pow(r, 6), -6/pow(r, 7), 1/pow(r, 12), 12/pow(r, 13));
+        }
+    }
+
+    fclose(TAB);
+
+    TAB = fopen("table_Ion_Ion.xvg", "w");
+
+    fprintf(TAB, "#\n# Tabela com potencial LJ 12-6\n#\n");
+
+    for(r = 0.0; r <= 3.0; r = r + 0.002)
+    {
+        if(r == 0.0)
+        {
+            fprintf(TAB, "%12.10e   %12.10e %12.10e   %12.10e %12.10e   %12.10e %12.10e\n", r, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        }
+        else
+        {
+            fprintf(TAB, "%12.10e   %12.10e %12.10e   %12.10e %12.10e   %12.10e %12.10e\n", r, 1/r, 1/pow(r,2), -1/pow(r, 6), -6/pow(r, 7), 1/pow(r, 12), 12/pow(r, 13));
+        }
+    }
+
+    fclose(TAB);
+
+    /* Fim do arquivo tabela */
+
+    /* Vamos construir o arquivo de topologia da proteína */
+    PTO = fopen("protein.itp", "w");
+    fprintf(PTO, "[ moleculetype ]\nPROCG\t1\n\n[ atoms ]\n");
+
+    for(cont = 1; cont <= numres; cont++)
+    {
+        fscanf(INP, "%s", lido);
+        for(ind = 1; ind <= 20; ind++)
+        {
+            k = strcmp(lido, res[ind]);
+
+            if(k == 0)
+            {
+                k = ind;
+                break;
+            }
+        }
+
+        if(cont == 1) /* Terminal Amina */
+        {
+            fprintf(PTO, "%3d   %sA%5d PROCG   %sA%6d%8.3f%8.3f\n", cont, res[k], cont, res[k], cont, par[k][11] + 1 + posres, par[k][6]);
+        }
+        else if(cont == numres) /* Terminal carboxila */
+        {
+            fprintf(PTO, "%3d   %sC%5d PROCG   %sC%6d%8.3f%8.3f\n", cont, res[k], cont, res[k], cont, par[k][11] - 1 + negres, par[k][6]);
+        }
+        else
+        {
+            fprintf(PTO, "%3d   %s %5d PROCG   %s %6d%8.3f%8.3f\n", cont, res[k], cont, res[k], cont, par[k][11], par[k][6]);
+        }
+    }
+
+    /* Parâmetros de ligação */
+    fprintf(PTO, "\n[ bonds ]\n");
+    for(cont = 1; cont <= numres - 1; cont++)
+    {
+        fprintf(PTO, "%3d%5d%5d%10.5f%10.1f\n", cont, cont + 1, 1, 0.8, 100000./2);
+    }
+
+    /* Parâmetros de ângulo */
+    fprintf(PTO, "\n[ angles ]\n");
+    for(cont = 1; cont <= numres - 2; cont++)
+    {
+        fprintf(PTO, "%3d%5d%5d%5d%10.3f%10.3f\n", cont + 1, cont, cont + 2, 1, 180., 100./2);
+    }
+
+    fclose(PTO);
+    fclose(INP);
+
+    /* Fim do arquivo de topologia para proteina */
+
+    /* Cálculo da sugestão da quantidade de particulas de água necessárias */
+    masb = 66463; /* Massa de uma molécula de BSA */
+    agu = 10000*54; /* Massa total de água no caso da BSA */
+    conc = masb/(masb + agu); /* Concentração de proteína desejada */
+    agu = (mas/conc) - mas; /* Massa de água necessária */
+    npa = agu/54; /* Número de partículas de água necessário */
+
+
+    /* Arquivo global de topologia para a simulação */
+    carga = (pos + posres) + (neg + negres);
+    TOP = fopen("topologia.top", "w");
+
+    if(carga < 0)
+    {
+        fprintf(TOP, "#include \"atomtypes.itp\"\n#include \"protein.itp\"\n#include \"water.itp\"\n#include \"ions.itp\"\n\n[ system ]\nPROCG in water\n\n[ molecules ]\nPROCG%5d\nH2O%7d\n", 1, npa + carga);
+        fprintf(TOP, "NA+%7d", -carga);
+    }
+    else if(carga > 0)
+    {
+        fprintf(TOP, "#include \"atomtypes.itp\"\n#include \"protein.itp\"\n#include \"water.itp\"\n#include \"ions.itp\"\n\n[ system ]\nPROCG in water\n\n[ molecules ]\nPROCG%5d\nH2O%7d\n", 1, npa - carga);
+        fprintf(TOP, "CL-%7d", carga);
+    }
+
+    fclose(TOP);
+
+    /* Fim do arquivo global de topologia */
+
+    /* Alteração do arquivo de input para adicionar a quantidade de partículas de água para o STR */
+    INP = fopen("protein.itp", "r");
+    OUT = fopen("temp.inp", "w");
+
+    fscanf(INP, "%[^\n]%*c", lido);
+    fscanf(INP, "%[^\n]%*c", lido);
+    fscanf(INP, "%s%s%s", lido, lido, lido);
+
+    for(cont = 1; cont <= numres; cont++)
+    {
+        fscanf(INP, "%s%s%[^\n]%*c", lixo, lido, lixo);
+        fprintf(OUT, "%s ", lido);
+
+        if(cont%15 == 0)
+        {
+            fprintf(OUT, "\n");
+        }
+    }
+
+    fclose(OUT);
+    fclose(INP);
+
+    remove(arqent);
+    OUT = fopen("temp.inp", "r");
+    INP = fopen(arqent, "w");
+    fprintf(INP, "TITLE  Input file generated by CF_LRP.\n%6d%6.2f%6.2f%6d%6d\n", numres, tam, ph, npa, carga);
+
+    for(cont = 1; cont <= numres; cont++)
+    {
+        fscanf(OUT, "%s", lido);
+        fprintf(INP, "%s ", lido);
+
+        if(cont%15 == 0)
+        {
+            fprintf(INP, "\n");
+        }
+    }
+
+    fclose(OUT);
+    fclose(INP);
+    remove("temp.inp");
+
+    /* Fim da modificação do arquivo de input */
+
+    /* Vamos escrever os dois arquivos .mdp necessários para as simulações */
+    MDP = fopen("minim.mdp", "w");
+    fprintf(MDP, ";Molecular dynamics parameter file generated by CF_LRP\n;These parameters are destined to the energy minimization step\n\n");
+    fprintf(MDP, "title\t\t\t= Energy minimization\n\n;Run control\nintegrator\t\t= steep\ntinit\t\t\t= 0\nnsteps\t\t\t= 50000\ninit-step\t\t= 0\n\n;Energy minimization\nemtol\t\t\t= 1000.0\nemstep\t\t\t= 0.1\n\n;Output control\nnstxout\t\t\t= 500\nnstvout\t\t\t= 500\nnstfout\t\t\t= 500\n");
+    fprintf(MDP, "nstlog\t\t\t= 500\nenergygrps\t\t= Protein Water Ion\n\n;Neighbor searching\ncutoff-scheme\t\t= group\nnstlist\t\t\t= 1\nns-type\t\t\t= grid\npbc\t\t\t= xyz\nrlist\t\t\t= 1.0\n\n;Electrostatics\ncoulombtype\t\t= PME\nrcoulomb\t\t= 1.0\nepsilon-r\t\t= 78.41\n\n;VdW\nvdwtype\t\t\t= User\nrvdw\t\t\t= 1.0\n\n;Tables\nenergygrp-table\t\t= Protein Protein Ion Ion Protein Ion\n\n;Temperature coupling\n");
+    fprintf(MDP, "tcoupl\t\t\t= no\ntc-grps\t\t\t= system\ntau-t\t\t\t= 0.1\nref-t\t\t\t= 300\n\n;Pressure coupling\npcoupl\t\t\t= no\npcoupltype\t\t= isotropic\ntau-p\t\t\t= 2.0\ncompressibility\t\t= 4.5e-5\nref-p\t\t\t= 1.0\n\n;Velocity generation\ngen-vel\t\t\t= no\ngen-temp\t\t= 300\ngen-seed\t\t= -1\n\n;Bonds\n");
+    fprintf(MDP, "constraints\t\t= none\nconstraint-algorithm\t= LINCS\ncontinuation\t\t= no\nlincs-order\t\t= 4\n");
+    fclose(MDP);
+
+    MDP = fopen("npt.mdp", "w");
+    fprintf(MDP, ";Molecular dynamics parameter file generated by CF_LRP\n;These parameters are destined to the NPT ensemble simulation\n\n;Run control\nintegrator\t\t= md\ntinit\t\t\t= 0\ndt\t\t\t= 0.002\nnsteps\t\t\t= 5000000\ncomm-mode\t\t= linear\nnstcomm\t\t\t= 10\n\n;Output control\nnstxout\t\t\t= 500\nnstvout\t\t\t= 500\nnstfout\t\t\t= 500\n");
+    fprintf(MDP, "nstlog\t\t\t= 500\nnstenergy\t\t= 500\nenergygrps\t\t= Protein Water Ion\n\n;Neighbor searching\ncutoff-scheme\t\t= group\nnstlist\t\t\t= 1\nns-type\t\t\t= grid\npbc\t\t\t= xyz\nrlist\t\t\t= 1.5\n\n;Electrostatics\ncoulombtype\t\t= user\nrcoulomb\t\t= 1.5\nepsilon-r\t\t= 78.41\n\n;VdW\nvdwtype\t\t\t= user\nrvdw\t\t\t= 1.5\n\n;Tables\nenergygrp-table\t\t= Protein Protein Ion Ion Protein Ion\n\n;Ewald\nfourierspacing\t\t= 0.16\noptimize_fft\t\t= yes\n\n;Temperature coupling\ntcoupl\t\t\t= v-rescale\n");
+    fprintf(MDP, "tc-grps\t\t\t= system\ntau-t\t\t\t= 0.1\nref-t\t\t\t= 300\n\n;Pressure coupling\npcoupl\t\t\t= berendsen\npcoupltype\t\t= isotropic\ntau-p\t\t\t= 2.0\ncompressibility\t\t= 4.5e-5\nref-p\t\t\t= 1.0\n\n;Velocity generation\ngen-vel\t\t\t= yes\ngen-temp\t\t= 300\ngen-seed\t\t= -1\n\n;Bonds\nconstraints\t\t= none\n");
+    fprintf(MDP, "constraint-algorithm\t= LINCS\ncontinuation\t\t= no\nlincs-order\t\t= 4\n");
+    fclose(MDP);
+
+    /* Fim dos arquivos de parâmetros das simulações */
+
+    /* Vamos escrever o arquivo de index da simulação */
+    NDX = fopen("index.ndx", "w");
+    fprintf(NDX, "[ Protein ]\n");
+
+    for(cont = 1; cont <= numres; cont++)
+    {
+        fprintf(NDX, "%6d", cont);
+
+        if(cont%15 == 0)
+        {
+            fprintf(NDX, "\n");
+        }
+    }
+
+    fprintf(NDX, "\n\n[ Water ]\n");
+    ind = 1;
+
+    for(cont = numres + 1; cont <= numres + npa - abs(carga); cont++)
+    {
+        fprintf(NDX, "%6d", cont);
+
+        if(ind%15 == 0)
+        {
+            fprintf(NDX, "\n");
+        }
+
+        ind = ind + 1;
+    }
+
+    fprintf(NDX, "\n\n[ Ion ]\n");
+    ind = 1;
+
+    for(cont = numres + npa - abs(carga) + 1; cont <= npa + numres; cont++)
+    {
+        fprintf(NDX, "%6d", cont);
+
+        if(ind%15 == 0)
+        {
+            fprintf(NDX, "\n");
+        }
+
+        ind = ind + 1;
+    }
+
+    fprintf(NDX, "\n\n[ System ]\n");
+    ind = 1;
+
+    for(cont = 1; cont <= numres + npa; cont++)
+    {
+        fprintf(NDX, "%6d", cont);
+
+        if(ind%15 == 0)
+        {
+            fprintf(NDX, "\n");
+        }
+
+        ind = ind + 1;
+    }
+
+    fprintf(NDX, "\n");
+
+    fclose(NDX);
+
+    /* Fim do arquivo de index */
+
+    printf("\n%s\n", exito);
+}
+
+float hidro(float a)
+{
+    float b; /* Parâmetro calculado */
+
+    if(a < -1)
+    {
+        b = 1;
+    }
+    else if(a > 1)
+    {
+        b = 2;
+    }
+    else
+    {
+        b = 1;
+    }
+
+    return b;
+}
+
+/*************************************************************************************************************************************************************/
+/**                                                                                                                                                         **/
+/** Sugestões para a versão 5: estimar o sigma a partir dos volumes dos aminoácidos, estimar os volumes dos aminoácidos talvez a partir da equação que usei **/
+/** em processos de separação, implementar proteínas de multiplas cadeias (insulina) se baseando no TER do pdb                                              **/
+/** Escrever os arquivos mdp das simuações seria interessante! Outra coisa é verificar se a interação 12-4 cabe apenas para a água, para a proteína e para  **/
+/** proteína - água talvez seja melhor manter a interação padrão LJ 12-6                                                                                    **/
+/**                                                                                                                                                         **/
+/*************************************************************************************************************************************************************/
