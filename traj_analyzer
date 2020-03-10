@@ -1,0 +1,175 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+
+#define MAX 200
+
+/********************************************************************************************************************/
+/** Esse script foi desenhado sem contar com a possibilidade do trjconv gerar o arquivo de saída já em formato pdb **/
+/** o traj_novo foi escrito justamente sabendo dessa possibilidade. A grande questão é justamente o átomo que deve **/
+/** ser colocado nas colunas 13-16 do pdb.                                                                         **/
+/********************************************************************************************************************/
+
+void trajtxt();
+
+void main()
+{
+    int cont; /* Contador */
+    int ador; /* Contador interno */
+    int i; /* Índice */
+    char command[MAX]; /* Comando do simulador */
+    char nome_arquivogro[MAX]; /* Nome do arquivo para converter para pdb */
+    char nome_arquivopdb[MAX]; /* Nome do arquivo para converter para pdb */
+    char res[3]; /* Nome do resíduo lido no .gro */
+    char descarte [MAX]; /* Descarte de termos do .gro */
+    double x; /* Coordenada x lida do .gro */
+    double y; /* Coordenada y lida do .gro */
+    double z; /* Coordenada z lida do .gro */
+    double des; /* Descarte do .gro */
+    double arm; /* Armazena a leitura do .fit */
+    double med[MAX][MAX]; /* matriz de médias para o arquivo final */
+    FILE *LIS; /* Arquivo de entrada trjconv e apagar os gro, pdb e log */
+    FILE *GRO; /* Arquivo para ler os .gro */
+    FILE *PDB; /* Arquivo para escrever os .pdb */
+    FILE *FIT; /* Arquivo para ler os .fit */
+
+    trajtxt();
+
+    for(cont = 0; cont < 52; cont++)
+    {
+        for(ador = 0; ador < 4; ador++)
+        {
+            med[cont][ador] = 0;
+        }
+    }
+
+    LIS = fopen("traj.txt", "r");
+
+    system("echo 2 | gmx trjconv -s npt.tpr -f traj.trr -o traj_prot.trr -pbc mol");
+
+    for(cont = 1501; cont <= 2000; cont ++)
+    {
+        fscanf(LIS, "%[^\n]%*c", command);
+        system(command);
+
+        /* Seção para converter o arquivo .gro em .pdb */
+        sprintf(nome_arquivogro, "traj%d.gro", cont);
+        GRO = fopen(nome_arquivogro, "r");
+        sprintf(nome_arquivopdb, "traj%d.pdb", cont);
+        PDB = fopen(nome_arquivopdb, "w");
+
+        fscanf(GRO, "%[^\n]%*c", command);
+        fprintf(PDB, "COMPND    %s\n", command);
+        fprintf(PDB, "AUTHOR    Rafael Risnik Romeiro\n");
+        fscanf(GRO, "%[^\n]%*c", command);
+        for(ador = 1 ; ador <= 583; ador++)
+        {
+            fscanf(GRO, "%s %s %s %lf %lf %lf %lf %lf %lf", descarte, res, descarte, &x, &y, &z, &des, &des, &des); /* Lendo uma linha do .gro */
+            fprintf(PDB, "ATOM  %5d C    %s A%4d    %8.3f%8.3f%8.3f%6.2f%6.2f\n", ador, res, ador, 10*x, 10*y, 10*z, 1., 0.); /* Escrevendo uma linha do .pdb */
+        }
+        fprintf(PDB, "END");
+        fclose(GRO);
+        fclose(PDB);
+        /* Fim da seção para converter o aqruivo .gro em .pdb */
+    }
+
+    fclose(LIS);
+
+    system("crysol *.pdb exp.dat -cst");
+
+    LIS = fopen("del.txt", "r");
+
+    for(cont = 0; cont < 500; cont++)
+    {
+        fscanf(LIS, "%[^\n]%*c", command);
+        system(command);
+    }
+
+    fclose(LIS);
+
+    system("rm traj.txt del.txt traj_prot.trr crysol_summary.txt");
+
+    LIS = fopen("arqfit.txt", "r");
+
+    for(cont = 0; cont < 500; cont++)
+    {
+        fscanf(LIS, "%[^\n]%*c", command);
+        FIT = fopen(command, "r");
+        fscanf(FIT, "%[^\n]%*c %[^\n]%*c %[^\n]%*c %[^\n]%*c %[^\n]%*c %[^\n]%*c %[^\n]%*c %[^\n]%*c %[^\n]%*c", descarte, descarte, descarte, descarte, descarte, descarte, descarte, descarte, descarte); /* Eliminando as primeiras linhas inúteis */
+
+        for(ador = 0; ador < 52; ador++)
+        {
+            for(i = 0; i < 4; i++)
+            {
+                fscanf(FIT, "%lf", &arm);
+                med[ador][i] = med[ador][i] + arm;
+            }
+        }
+
+        fclose(FIT);
+    }
+
+    fclose(LIS);
+
+    for(cont = 0; cont < 52; cont++)
+    {
+        for(ador = 0; ador < 4; ador++)
+        {
+            med[cont][ador] = med[cont][ador]/500;
+        }
+    }
+
+    LIS = fopen("media.dat", "w");
+
+    for(cont = 0; cont < 52; cont++)
+    {
+        for(ador = 0; ador < 4; ador++)
+        {
+            fprintf(LIS, "  %8.6lE", med[cont][ador]);
+            if(ador == 3)
+            {
+                fprintf(LIS, "\n");
+            }
+        }
+    }
+
+    fclose(LIS);
+    LIS = fopen("delfit.txt", "r");
+
+    for(cont = 0; cont < 500; cont++)
+    {
+        fscanf(LIS, "%[^\n]%*c", command);
+        system(command);
+    }
+
+    fclose(LIS);
+    system("rm arqfit.txt delfit.txt");
+}
+
+void trajtxt()
+{
+    int cont; /* Contador */
+    FILE *SAI; /* Arquivo de saída do trjconv */
+    FILE *DEL; /* Arquivo para apagar os gro, pdb e log*/
+    FILE *ARQ; /* Lista de arquivos fit para a média */
+    FILE *DEA; /* Arquivo para apagar os .fit */
+
+    SAI = fopen("traj.txt", "w");
+    DEL = fopen("del.txt", "w");
+    ARQ = fopen("arqfit.txt", "w");
+    DEA = fopen("delfit.txt", "w");
+
+    for(cont = 1501; cont <= 2000; cont++)
+    {
+        fprintf(SAI, "echo 2 | gmx trjconv -s npt.tpr -f traj_prot.trr -o traj%d.gro -dump %d\n", cont, cont);
+        fprintf(DEL, "rm traj%d.gro traj%d.pdb traj%d00.log\n", cont, cont, cont);
+        fprintf(ARQ, "traj%d00.fit\n", cont);
+        fprintf(DEA, "rm traj%d00.fit\n", cont);
+    }
+
+    fclose(SAI);
+    fclose(DEL);
+    fclose(ARQ);
+    fclose(DEA);
+}
