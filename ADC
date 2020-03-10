@@ -1,0 +1,182 @@
+/***************************************************************************/
+/**                                                                       **/
+/**     Este código servirá para calcular as distâncias entre carbonos    **/
+/**     alfa tanto para a proteína atomística quanto para a CG            **/
+/**                                                                       **/
+/***************************************************************************/
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+
+#define TRUE 1
+#define MAX 1000
+
+void main(int argc, char** argv)
+{
+    char ent[] = "-f"; /* Sinalizador para o arquivo .pdb da atomística */
+    char *arqent; /* String para guardar o nome do arquivo .pdb da atomística */
+    char ler[] = "-t"; /* Sinalizador para o arquivo .gro da coarse-grained */
+    char *arqler; /* String para guardar o nome do arquivo .gro da coarse-grained */
+    char sai[] = "-o"; /* Sinalizador para o arquivo .txt de saída */
+    char *arqsai; /* String para guardar o nome do arquivo de saída */
+    char verpdb[] = ".pdb"; /* Verificador da extensão .pdb */
+    char vergro[] = ".gro"; /* Verificador da extensão .gro */
+    char vertxt[] = ".txt"; /* Verificador da extensão .txt */
+    char verif[4]; /* String para armazenamento da extensão na verificação */
+    char CA[] = "CA"; /* String para verificar se o átomo é o carbono alfa */
+    char lido[MAX]; /* String para leitura */
+    char ato[MAX]; /* String para leitura */
+    char lixo[MAX]; /* String para jogar informações no lixo */
+    char atom[] = "ATOM"; /* String para encontrar a primeira ocorrência da palavra ATOM no arquivo .pdb */
+    char erro[] = "ERRO: Faltou especificar algum arquivo de entrada."; /* Erro para especificação de arquivos de entrada incorreta */
+    char erroarg[] = "ERRO: Quantidade de argumentos incorreta."; /* Erro para a quantidade incorreta de argumentos */
+    char erropdb[] = "ERRO: Extensão do arquivo de entrada atomístico incorreta."; /* Erro para extensão .pdb */
+    char errogro[] = "ERRO: Extensão do arquivo de entrada coarse-grained incorreta."; /* Erro para extensão .gro */
+    int f, t, o; /* Índices dos arquivos de entrada e de saída */
+    int compe, compt, comps; /* Inteiros para armazenamento do tamanho dos nomes dos arquivos */
+    int cont, ador; /* Contador inteiro para funções gerais */
+    int numres; /* Quantidade de resíduos da proteína analisada */
+    FILE *PDB; /* Variável para manipular o arquivo .pdb */
+    FILE *GRO; /* Variável para manipular o arquivo .gro */
+    FILE *TXT; /* Variável para manipular o arquivo .txt */
+    float coordpdb[MAX][4]; /* Matriz que guardará as coordenadas dos carbonos alfa do arquivo .pdb */
+    float coordgro[MAX][4]; /* Matriz que guardará as coordenadas dos carbonos alfa do arquivo .gro */
+    float distpdb; /* Distância para a proteína atomística */
+    float distgro; /* Distância para a proteína coarse-grained */
+    float x, y, z; /* Coordenadas do átomo lido */
+
+    /* Rotina para a leitura dos nomes dos arquivos e segurança contra entradas erradas */
+    f = 0;
+    t = 0;
+    o = 0;
+
+    if(argc%2 == 0) /* Sempre temos um número ímpar de argumentos por conta do nome do programa */
+    {
+        printf("%s", erroarg);
+        exit(EXIT_FAILURE);
+    }
+
+    for(cont = 0; cont < argc; cont ++)
+    {
+        if(strcmp(argv[cont], ent) == 0) /* Isso significa que ele encontrou o sinalizador "-f" */
+        {
+            f = cont + 1;
+            arqent = argv[f];
+        }
+
+        if(strcmp(argv[cont], ler) == 0)
+        {
+            t = cont + 1;
+            arqler = argv[t];
+        }
+
+        if(strcmp(argv[cont], sai) == 0)
+        {
+            o = cont + 1;
+            arqsai = argv[o];
+        }
+    }
+
+    /* Passamos agora para a sessão contra erros de entrada */
+
+    if(f%2 != 0 || t%2 != 0 || arqent == "" || arqler == "" || f == 0 || t == 0 || arqent == sai || arqler == sai)
+    {
+        printf("%s", erro);
+        exit(EXIT_FAILURE);
+    }
+
+    compe = strlen(arqent);
+    compt = strlen(arqler);
+    comps = strlen(arqsai);
+
+    if(strcmp(strcpy(verif, &arqent[compe - 4]), verpdb) != 0)
+    {
+        printf("%s", erropdb);
+        exit(EXIT_FAILURE);
+    }
+
+    if(strcmp(strcpy(verif, &arqler[compt - 4]), vergro) != 0)
+    {
+        printf("%s", errogro);
+        exit(EXIT_FAILURE);
+    }
+
+    if(strcmp(arqsai, "") != 0)
+    {
+        if(strcmp(strcpy(verif, &arqsai[comps - 4]), vertxt) != 0)
+        {
+            strcat(arqsai, vertxt);
+        }
+    }
+
+    /* Final da sessão de leitura a proteção a entradas incorretas */
+
+    /* Vamos iniciar agora o tratamento com o arquivo .pdb. Vamos armazenar as coordenadas x, y e z de todos os carbonos alfa */
+
+    PDB = fopen(arqent, "r");
+    cont = 0;
+
+    while(TRUE) /* Vamos armazenar as coordenadas de todos os carbonos alfa na matriz de coordenadas */
+    {
+        fscanf(PDB, "%s", ato);
+
+        if(strcmp(ato, atom) == 0)
+        {
+            fscanf(PDB, "%s%s%s%s%s%f%f%f%s%s%s", lixo, ato, lixo, lixo, lixo, &x, &y, &z, lixo, lixo, lixo);
+
+            if(strcmp(ato, CA) == 0)
+            {
+                coordpdb[cont][1] = x;
+                coordpdb[cont][2] = y;
+                coordpdb[cont][3] = z;
+                cont = cont + 1;
+            }
+        }
+        else if(strcmp(ato, "END") == 0)
+        {
+            break;
+        }
+        else
+        {
+            fscanf(PDB, "%[^\n]%*c", lixo);
+        }
+    }
+
+    fclose(PDB);
+    numres = cont;
+
+    /* Vamos iniciar o tratamento do arquivo .gro. Vamos armazenar as coordenadas de todos os resíduos, que são representados pelos carbonos alfa */
+
+    GRO = fopen(arqler, "r");
+    fscanf(GRO, "%[^\n]%*c", lixo);
+    fscanf(GRO, "%[^\n]%*c", lixo);
+
+    for(cont = 1; cont <= numres; cont ++)
+    {
+        fscanf(GRO, "%s%s%s%f%f%f%s%s%s", lixo, lixo, lixo, &x, &y, &z, lixo, lixo, lixo);
+        coordgro[cont][1] = x;
+        coordgro[cont][2] = y;
+        coordgro[cont][3] = z;
+    }
+
+    fclose(GRO);
+
+    /* Vamos agora preparar para imprimir o arquivo de saída com os dados de distância calculados */
+
+    TXT = fopen("Distancias.txt", "w");
+    fprintf(TXT, " Resíduo i  ->  Resíduo j  Atomística  Coarse-Grained  Desvio\n\n");
+
+    for(cont = 1; cont <= numres; cont ++)
+    {
+        for(ador = cont + 1; ador <= numres; ador ++)
+        {
+            distpdb = pow(pow(coordpdb[cont][1] - coordpdb[ador][1], 2) + pow(coordpdb[cont][2] - coordpdb[ador][2], 2) + pow(coordpdb[cont][3] - coordpdb[ador][3], 2), 0.5);
+            distgro = pow(pow(coordgro[cont][1] - coordgro[ador][1], 2) + pow(coordgro[cont][2] - coordgro[ador][2], 2) + pow(coordgro[cont][3] - coordgro[ador][3], 2), 0.5);
+            fprintf(TXT, " %6d -> %6d  %2.5f    %2.5f    %2.5f\n", cont, ador, distpdb, distgro, pow(distpdb-distgro, 2));
+        }
+    }
+
+    fclose(TXT);
+}
