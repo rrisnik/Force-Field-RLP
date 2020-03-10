@@ -1,0 +1,166 @@
+/* Configuração de intestino para a proteína CG */
+
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <math.h>
+
+#define PI 3.141592654
+
+int main()
+{
+    FILE *ENT; /* Arquivo de entrada contendo a sequência de resíduos da proteína */
+    FILE *SAI; /* Arquivo de saída com a configuração nova */
+    char RES[3]; /* Vetor para armazenar o resíduo lido no arquivo de entrada */
+    char GLU[] = "GLU", ASP[] = "ASP", HIS[] = "HIS", LYS[] = "LYS", ARG[] = "ARG", MET[] = "MET", PROT[] = "BSACG"; /* Resíduos existentes */
+    int N; /* Quantidade de resíduos na proteína */
+    int L; /* Identificador da molécula no .gro */
+    int cont; /* Contador */
+    int RES1, RES2, RES3, RES4, RES5; /* Comparativos entre resíduos */
+    int traj; /* Controle da trajetória */
+    double phi; /* Espaçamento ângular */
+    double X, Y, Z; /* Coordenadas de cada resíduo */
+    double boxl; /* Tamanho da caixa */
+    double delta; /* Incremento */
+
+    /* Atribuição das constantes */
+    N = 583;
+    L = 1;
+    boxl = 15.0;
+    delta = 3.0*PI/180;
+    phi = 0;
+
+    /* Abertura dos arquivos de entrada e saída */
+
+    ENT = fopen("primstruc.pdb", "r");
+    SAI = fopen("conf_in.gro", "w");
+
+    fprintf(SAI, "BSA coarse-grained\n");
+    fprintf(SAI, "%5d\n", N);
+
+    /* Construção da molécula */
+
+     X = 6.5*cos(phi) + 7.5;
+     Y = 6.5*sin(phi) + 7.5;
+     Z = 3.0;
+     traj = 1;
+
+    for(cont = 1; cont <= N; cont ++)
+    {
+        fscanf(ENT, "%s", RES);
+        RES1 = strcmp(RES, GLU);
+        RES2 = strcmp(RES, ASP);
+        RES3 = strcmp(RES, HIS);
+        RES4 = strcmp(RES, LYS);
+        RES5 = strcmp(RES, ARG);
+
+        if(RES1 == 0 || RES2 == 0)
+        {
+            fprintf(SAI, "%5d%-5s%5s%5d%8.3lf%8.3lf%8.3lf\n", L, PROT, GLU, cont, X, Y, Z);
+        }
+        else if(RES3 == 0 || RES4 == 0 || RES5 == 0)
+        {
+            fprintf(SAI, "%5d%-5s%5s%5d%8.3lf%8.3lf%8.3lf\n", L, PROT, HIS, cont, X, Y, Z);
+        }
+        else
+        {
+            fprintf(SAI, "%5d%-5s%5s%5d%8.3lf%8.3lf%8.3lf\n", L, PROT, MET, cont, X, Y, Z);
+        }
+
+        if(cont <= 60)
+        {
+            phi = phi + delta;
+            X = 6.5*cos(phi) + 7.5;
+            Y = 6.5*sin(phi) + 7.5;
+        }
+        else if(cont > 60 && cont <= 65)
+        {
+            Z = Z + 0.2;
+        }
+        else if(cont > 65 && cont <= 126)
+        {
+            phi = phi - delta;
+            X = 6.5*cos(phi) + 7.5;
+            Y = 6.5*sin(phi) + 7.5;
+        }
+        else if(cont > 126 && cont <= 131)
+        {
+            Z = Z + 0.2;
+        }
+        else if(cont > 131 && cont <= 192)
+        {
+            phi = phi + delta;
+            X = 6.5*cos(phi) + 7.5;
+            Y = 6.5*sin(phi) + 7.5;
+        }
+        else if(cont > 192 && cont <= 197)
+        {
+            Z = Z + 0.2;
+        }
+        else if(cont > 197 && cont <= 258)
+        {
+            phi = phi - delta;
+            X = 6.5*cos(phi) + 7.5;
+            Y = 6.5*sin(phi) + 7.5;
+        }
+        else if(cont > 258 && cont <= 263)
+        {
+            Z = Z + 0.2;
+        }
+        else if(cont > 263 && cont <= 324)
+        {
+            phi = phi + delta;
+            X = 6.5*cos(phi) + 7.5;
+            Y = 6.5*sin(phi) + 7.5;
+        }
+        else if(cont > 324 && cont <= 329)
+        {
+            Z = Z + 0.2;
+        }
+        else if(cont > 329 && cont <= 390)
+        {
+            phi = phi - delta;
+            X = 6.5*cos(phi) + 7.5;
+            Y = 6.5*sin(phi) + 7.5;
+        }
+        else if(cont > 390 && cont <= 395)
+        {
+            Z = Z + 0.2;
+        }
+        else if(cont > 395 && cont <= 456)
+        {
+            phi = phi + delta;
+            X = 6.5*cos(phi) + 7.5;
+            Y = 6.5*sin(phi) + 7.5;
+        }
+        else if(cont > 456 && cont <= 461)
+        {
+            Z = Z + 0.2;
+        }
+        else if(cont > 461 && cont <= 522)
+        {
+            phi = phi - delta;
+            X = 6.5*cos(phi) + 7.5;
+            Y = 6.5*sin(phi) + 7.5;
+        }
+        else if(cont > 522 && cont <= 527)
+        {
+            Z = Z + 0.2;
+        }
+        else if(cont > 527 && cont <= 583)
+        {
+            phi = phi + delta;
+            X = 6.5*cos(phi) + 7.5;
+            Y = 6.5*sin(phi) + 7.5;
+        }
+
+    }
+
+    fprintf(SAI, "%10.5lf%10.5lf%10.5lf\n", boxl, boxl, boxl);
+    fclose(ENT);
+    fclose(SAI);
+
+    system("editconf -f conf_in.gro -o bsa_in.gro");
+
+    return 0;
+}
