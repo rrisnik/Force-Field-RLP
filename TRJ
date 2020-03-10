@@ -1,0 +1,426 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+#include <string.h>
+
+#define MAX 200
+#define TRUE 1
+
+void trajtxt(char *nometpr);
+void trajpcg(char *nometpr);
+
+void main(int argc, char **argv)
+{
+    char ent[] = "-f"; /* Sinalizador do arquivo de entrada - trajetória atomística*/
+    char *arqent; /* Nome do arquivo de entrada: Será a trajetória do arquivo da simulação atomistica */
+    char tpr[] = "-t"; /* Sinalizador do arquivo tpr atomístico */
+    char *arqtpr; /* Nome do arquivo tpr */
+    char trr[] = "-s"; /* Sinlizador do arquivo de entrada - trajetória CG */
+    char *arqtrr; /* Nome do arquivo de trajetória CG */
+    char tpc[] = "-e"; /* Sinalizador do arquivo tpr CG */
+    char *arqtpc; /* Nome do arquivo tpr CG */
+    char arqpdb[MAX]; /* Nome do arquivo pdb */
+    char arqgro[MAX]; /* String usada para o nome do arquivo gro */
+    char vertrr[] = ".trr"; /* Verificador para a extensão do arquivo de entrada */
+    char vertpr[] = ".tpr"; /* Verificador para a extensão do arquivo gro */
+    char verpdb[] = ".pdb"; /* Verificador para a extensão do arquivo pdb */
+    char verinp[] = ".inp"; /* Verificador para a extensão do arquivo inp */
+    char verif[4]; /* String para verificação da extensão do arquivo */
+    char erroarg[] = "ERRO: Número de argumentos inconsistente.\n"; /* Erro de argumentos inconsistentes */
+    char erroinp[] = "ERRO: Extensão do arquivo de entrada incorreta.\n";
+    char command[MAX]; /* String para guardar comandos que serão dados ao sistema pela função system */
+    char lixo[MAX]; /* String para jogar informações fora */
+    char res[3]; /* Resíduo */
+    double x, y, z; /* Coordenadas lidas no .gro */
+    double des; /* Informações descartadas */
+    double arm, jot; /* Variável para armazenar o dado lido no .fit */
+    double med[MAX][MAX]; /* Matriz para as médias do fator de forma */
+    int f, e, t, s; /* Indices de entrada e saída de arquivos */
+    int cont, ador, i; /* Contador para loops em geral */
+    int compe, compg, comps, compt, compi; /* Variáveis para armazenamento do tamanho dos nomes dos arquivos */
+    int numres; /* Número de resíduos */
+    FILE *LIS; /* Lista de comandos */
+    FILE *GRO; /* Arquivo gro */
+    FILE *PDB; /* Arquivo pdb */
+    FILE *FIT; /* Arquivo fit */
+
+    arqent = "";
+    arqtpr = "";
+    arqtrr = "";
+    arqtpc = "";
+    f = 0;
+    t = 0;
+    s = 0;
+    e = 0;
+
+    for(cont = 0; cont < MAX; cont++)
+    {
+        for(ador = 0; ador < MAX; ador++)
+        {
+            med[cont][ador] = 0;
+        }
+    }
+
+    /* Sistema de proteção contra entradas incorretas e loop para leitura do arquivo de entrada e de saída */
+    if(argc%2 == 0 || argc == 1)
+    {
+        printf("%s", erroarg); /* Na variável argc fica armazenado a quantidade de strings digitado, portanto se o número for ímpar o número de argumentos está incompleto */
+        exit(EXIT_FAILURE);
+    }
+
+    for(cont = 0; cont < argc; cont++)
+    {
+        if(strcmp(argv[cont], ent) == 0)
+        {
+            f = cont + 1;
+            arqent = argv[f];
+        }
+        if(strcmp(argv[cont], tpr) == 0)
+        {
+            t = cont + 1;
+            arqtpr = argv[t];
+        }
+        if(strcmp(argv[cont], trr) == 0)
+        {
+            s = cont + 1;
+            arqtrr = argv[s];
+        }
+        if(strcmp(argv[cont], tpc) == 0)
+        {
+            e = cont + 1;
+            arqtpc = argv[e];
+        }
+    }
+
+    /* Vamos testar se as extensões dos arquivos estão corretas */
+    compe = strlen(arqent);
+    compg = strlen(arqtpr);
+    comps = strlen(arqtrr);
+    compt = strlen(arqtpc);
+
+    if(strcmp(strcpy(verif, &arqent[compe - 4]), vertrr) != 0)
+    {
+        printf("%s", erroinp);
+        exit(EXIT_FAILURE);
+    }
+    if(strcmp(strcpy(verif, &arqtpr[compg - 4]), vertpr) != 0)
+    {
+        printf("%s", erroinp);
+        exit(EXIT_FAILURE);
+    }
+    if(strcmp(strcpy(verif, &arqtrr[comps - 4]), vertrr) != 0)
+    {
+        printf("%s", erroinp);
+        exit(EXIT_FAILURE);
+    }
+    if(strcmp(strcpy(verif, &arqtpc[compt - 4]), vertpr) != 0)
+    {
+        printf("%s", erroinp);
+        exit(EXIT_FAILURE);
+    }
+
+    /* Fim da sessão de leitura dos arquivos de entrada e saída */
+
+    /* Vamos agora preparar os arquivos para fazer as médias do fator de forma para a simulação atomística */
+
+    strcpy(command, "echo 1 | gmx trjconv -s ");
+    strcat(command, arqtpr);
+    strcat(command, " -f ");
+    strcat(command, arqent);
+    strcat(command, " -pbc atom -o traj_prot.trr");
+
+    system(command); /* Corrige a trajetória e isola a proteína */
+
+    /* Precisamos quebrar os últimos 500 ps da trajetória de 1 em 1 ps e converter cada um deles em um pdb */
+
+    trajtxt(arqtpr);
+
+    LIS = fopen("traj.txt", "r");
+
+    for(cont = 1501; cont <= 2000; cont ++)
+    {
+        fscanf(LIS, "%[^\n]%*c", command);
+        system(command);
+    }
+
+    fclose(LIS);
+    remove("traj.txt");
+
+    system("crysol *.pdb exp.dat -cst -sm 1.0 -ns 100");
+
+    LIS = fopen("del.txt", "r");
+
+    for(cont = 0; cont < 500; cont ++)
+    {
+        fscanf(LIS, "%[^\n]%*c", command);
+        system(command);
+    }
+
+    fclose(LIS);
+    remove("del.txt");
+
+    LIS = fopen("arqint.txt", "r");
+
+    for(cont = 0; cont < 500; cont ++)
+    {
+        fscanf(LIS, "%[^\n]%*c", command);
+        FIT = fopen(command, "r");
+        fscanf(FIT, "%[^\n]%*c", lixo);
+        fscanf(FIT, "%[^\n]%*c", lixo);
+        fscanf(FIT, "%[^\n]%*c", lixo);
+        fscanf(FIT, "%[^\n]%*c", lixo);
+        fscanf(FIT, "%[^\n]%*c", lixo);
+        fscanf(FIT, "%[^\n]%*c", lixo);
+        fscanf(FIT, "%[^\n]%*c", lixo);
+
+        for(ador = 0; ador < 101; ador ++)
+        {
+            for(i = 0; i < 4; i ++)
+            {
+                fscanf(FIT, "%lf", &arm);
+                med[ador][i] = med[ador][i] + arm;
+            }
+        }
+
+        fclose(FIT);
+        remove(command);
+    }
+
+    fclose(LIS);
+    remove("arqint.txt");
+
+    for(cont = 0; cont < 101; cont ++)
+    {
+        for(ador = 0; ador < 4; ador ++)
+        {
+            med[cont][ador] = med[cont][ador]/500;
+        }
+    }
+
+    LIS = fopen("media.dat", "w");
+    fprintf(LIS, "Dados da simulação atomística\n");
+
+    for(cont = 0; cont < 101; cont++)
+    {
+        for(ador = 0; ador < 4; ador++)
+        {
+            fprintf(LIS, "  %8.6lE", med[cont][ador]);
+
+            if(ador == 3)
+            {
+                fprintf(LIS, "\n");
+            }
+        }
+    }
+
+    fclose(LIS);
+    remove("crysol_summary.txt");
+    remove("delfit.txt");
+    remove("traj_prot.trr");
+
+    /* Seção para calcular os fatores de forma da simulação Coarse-Grained */
+
+    strcpy(command, "echo 2 | gmx trjconv -s ");
+    strcat(command, arqtpc);
+    strcat(command, " -f ");
+    strcat(command, arqtrr);
+    strcat(command, " -pbc atom -o traj_protcg.trr");
+
+    system(command); /* Corrije a trajetória e isola a proteína em um arquivo de trajetória único */
+
+    /* Precisamos quebrar os últimos 500 ps da trajetória de 1 em 1 ps e converter cada um deles em um pdb */
+
+    trajpcg(arqtpc);
+    LIS = fopen("traj.txt", "r");
+
+    for(cont = 1501; cont <= 10000; cont ++)
+    {
+        fscanf(LIS, "%[^\n]%*c", command);
+        system(command);
+
+        /* Agora que um arquivo .gro foi gerado precisamos convertê-lo em pdb */
+        sprintf(arqgro, "traj%d.gro", cont);
+        GRO = fopen(arqgro, "r");
+        sprintf(arqpdb, "traj%d.pdb", cont);
+        PDB = fopen(arqpdb, "w");
+        fscanf(GRO, "%[^\n]%*c", command);
+        fprintf(PDB, "COMPND    %s\n", command);
+        fprintf(PDB, "AUTHOR    TRJ_RLP\n");
+        fscanf(GRO, "%d", &numres);
+
+        for(ador = 1; ador <= numres; ador++)
+        {
+            fscanf(GRO, "%s %s %s %lf %lf %lf %lf %lf %lf", lixo, res, lixo, &x, &y, &z, &des, &des, &des); /* Lendo uma linha do .gro */
+            fprintf(PDB, "ATOM %5d C     PRO A%4d    %8.3f%8.3f%8.3f%6.2f%6.2f\n", ador, ador, 10*x, 10*y, 10*z, 1., 0.); /* Escrevendo uma linha do .pdb */
+        }
+        fprintf(PDB, "END");
+        fclose(GRO);
+        fclose(PDB);
+    }
+
+    fclose(LIS);
+    remove("traj.txt");
+
+    system("crysol *.pdb exp.dat -cst -sm 1.0 -ns 100");
+
+    LIS = fopen("del.txt", "r");
+
+    for(cont = 0; cont < 8500; cont ++)
+    {
+        fscanf(LIS, "%[^\n]%*c", command);
+        system(command);
+    }
+
+    fclose(LIS);
+    remove("del.txt");
+
+    for(cont = 0; cont < MAX; cont ++)
+    {
+        for(ador = 0; ador < MAX; ador ++)
+        {
+            med[cont][ador] = 0;
+        }
+    }
+
+    /* Agora precisamos começar a calcular a média de todos os arquivos que o crysol gerou da proteina CG em relação ao arquivo .dat gerado */
+
+    LIS = fopen("arqint.txt", "r");
+
+    for(cont = 0; cont < 8500; cont ++)
+    {
+        fscanf(LIS, "%[^\n]%*c", command);
+        FIT = fopen(command, "r");
+        fscanf(FIT, "%[^\n]%*c", lixo);
+        fscanf(FIT, "%[^\n]%*c", lixo);
+        fscanf(FIT, "%[^\n]%*c", lixo);
+        fscanf(FIT, "%[^\n]%*c", lixo);
+        fscanf(FIT, "%[^\n]%*c", lixo);
+        fscanf(FIT, "%[^\n]%*c", lixo);
+        fscanf(FIT, "%[^\n]%*c", lixo);
+
+        for(ador = 0; ador < 101; ador ++)
+        {
+            for(i = 0; i < 4; i ++)
+            {
+                fscanf(FIT, "%lf", &arm);
+                med[ador][i] = med[ador][i] + arm;
+            }
+        }
+
+        fclose(FIT);
+        remove(command);
+    }
+
+    fclose(LIS);
+    remove("arqint.txt");
+
+    for(cont = 0; cont < 101; cont ++)
+    {
+        for(ador = 0; ador < 4; ador ++)
+        {
+            med[cont][ador] = med[cont][ador]/8500;
+        }
+    }
+
+    LIS = fopen("media_cg.dat", "w");
+    fprintf(LIS, "Arquivo de dados do fator de forma coarse-grained\n");
+
+    for(cont = 0; cont < 101; cont++)
+    {
+        for(ador = 0; ador < 4; ador++)
+        {
+            fprintf(LIS, "  %8.6lE", med[cont][ador]);
+
+            if(ador == 3)
+            {
+                fprintf(LIS, "\n");
+            }
+        }
+    }
+
+    fclose(LIS);
+    remove("crysol_summary.txt");
+    remove("traj_protcg.trr");
+
+    /* Vamos agora apenas juntar dados em um único arquivo para facilitar o plot */
+
+    LIS = fopen("media.dat", "r");
+    FIT = fopen("media_cg.dat", "r");
+
+    fscanf(LIS, "%[^\n]%*c", lixo);
+    fscanf(FIT, "%[^\n]%*c", lixo);
+
+    PDB = fopen("formfactor.dat", "w");
+
+    for(cont = 1; cont < 101; cont ++)
+    {
+        fscanf(LIS, "%lf", &arm);
+        fprintf(PDB, "  %8.6lE", arm);
+        fscanf(LIS, "%lf %lf %lf", &arm, &jot, &des);
+        fprintf(PDB, "  %8.6lE  %8.6lE  %8.6lE", arm, jot, des);
+        fscanf(FIT, "%lf %lf %lf %lf", &des, &des, &des, &arm);
+        fprintf(PDB, "  %8.6lE\n", arm);
+    }
+
+    fclose(LIS);
+    fclose(FIT);
+    /*remove("media.dat");
+    remove("media_cg.dat");*/
+
+}
+
+void trajtxt(char *nometpr)
+{
+    int cont; /* Contador */
+    char aux[MAX]; /* Auxiliar para formar os comandos do trjconv */
+    FILE *SAI; /* Arquivo de saída do trjconv */
+    FILE *DEL; /* Arquivo para apagar os gro, pdb e log*/
+    FILE *ARQ; /* Lista de arquivos fit para a média */
+
+    SAI = fopen("traj.txt", "w");
+    DEL = fopen("del.txt", "w");
+    ARQ = fopen("arqint.txt", "w");
+
+    strcpy(aux, "echo 1 | gmx trjconv -s ");
+    strcat(aux, nometpr);
+    strcat(aux, " -f traj_prot.trr -o ");
+
+    for(cont = 1501; cont <= 2000; cont++)
+    {
+        fprintf(SAI, "%straj%d.pdb -dump %d -pbc atom\n", aux, cont, cont);
+        fprintf(DEL, "rm traj%d.pdb traj%d00.log traj%d00.alm\n", cont, cont, cont);
+        fprintf(ARQ, "traj%d00.fit\n", cont);
+    }
+
+    fclose(SAI);
+    fclose(DEL);
+    fclose(ARQ);
+}
+
+void trajpcg(char *nometpr)
+{
+    int cont; /* Contador */
+    char aux[MAX]; /* Auxiliar para formar os comandos do trjconv */
+    FILE *SAI; /* Arquivo de saída do trjconv */
+    FILE *DEL; /* Arquivo para apagar os gro, pdb e log*/
+    FILE *ARQ; /* Lista de arquivos fit para a média */
+
+    SAI = fopen("traj.txt", "w");
+    DEL = fopen("del.txt", "w");
+    ARQ = fopen("arqint.txt", "w");
+
+    strcpy(aux, "echo 2 | gmx trjconv -s ");
+    strcat(aux, nometpr);
+    strcat(aux, " -f traj_protcg.trr -o ");
+
+    for(cont = 1501; cont <= 10000; cont++)
+    {
+        fprintf(SAI, "%straj%d.gro -dump %d -pbc atom\n", aux, cont, cont);
+        fprintf(DEL, "rm traj%d.gro traj%d.pdb traj%d00.log\n", cont, cont, cont);
+        fprintf(ARQ, "traj%d00.fit\n", cont);
+    }
+
+    fclose(SAI);
+    fclose(DEL);
+    fclose(ARQ);
+}
