@@ -1,0 +1,104 @@
+#include <stdlib.h>
+#include <stdio.h>
+#include <math.h>
+#include <string.h>
+
+void main()
+{
+    FILE *ENT; /* Arquivo de entrada */
+    FILE *SAI; /* Arquivo de saída */
+    int cont; /* Contador para funções gerais */
+    char lido[5]; /* String para leitura */
+
+    ENT = fopen("seq_bsa.txt", "r");
+    SAI = fopen("trad.txt", "w");
+
+    for(cont = 1; cont <= 583; cont ++)
+    {
+        fscanf(ENT, "%s", lido);
+
+        if(strcmp(lido, "A") == 0)
+        {
+            fprintf(SAI, "ALA\n");
+        }
+        else if(strcmp(lido, "R") == 0)
+        {
+            fprintf(SAI, "ARG\n");
+        }
+        else if(strcmp(lido, "N") == 0)
+        {
+            fprintf(SAI, "ASN\n");
+        }
+        else if(strcmp(lido, "D") == 0)
+        {
+            fprintf(SAI, "ASP\n");
+        }
+        else if(strcmp(lido, "C") == 0)
+        {
+            fprintf(SAI, "CYS\n");
+        }
+        else if(strcmp(lido, "E") == 0)
+        {
+            fprintf(SAI, "GLU\n");
+        }
+        else if(strcmp(lido, "Q") == 0)
+        {
+            fprintf(SAI, "GLN\n");
+        }
+        else if(strcmp(lido, "G") == 0)
+        {
+            fprintf(SAI, "GLY\n");
+        }
+        else if(strcmp(lido, "H") == 0)
+        {
+            fprintf(SAI, "HIS\n");
+        }
+        else if(strcmp(lido, "I") == 0)
+        {
+            fprintf(SAI, "ILE\n");
+        }
+        else if(strcmp(lido, "L") == 0)
+        {
+            fprintf(SAI, "LEU\n");
+        }
+        else if(strcmp(lido, "K") == 0)
+        {
+            fprintf(SAI, "LYS\n");
+        }
+        else if(strcmp(lido, "M") == 0)
+        {
+            fprintf(SAI, "MET\n");
+        }
+        else if(strcmp(lido, "F") == 0)
+        {
+            fprintf(SAI, "PHE\n");
+        }
+        else if(strcmp(lido, "P") == 0)
+        {
+            fprintf(SAI, "PRO\n");
+        }
+        else if(strcmp(lido, "S") == 0)
+        {
+            fprintf(SAI, "SER\n");
+        }
+        else if(strcmp(lido, "T") == 0)
+        {
+            fprintf(SAI, "THR\n");
+        }
+        else if(strcmp(lido, "W") == 0)
+        {
+            fprintf(SAI, "TRP\n");
+        }
+        else if(strcmp(lido, "Y") == 0)
+        {
+            fprintf(SAI, "TYR\n");
+        }
+        else if(strcmp(lido, "V") == 0)
+        {
+            fprintf(SAI, "VAL\n");
+        }
+    }
+
+    fclose(ENT);
+    fclose(SAI);
+}
